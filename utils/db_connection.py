@@ -39,6 +39,8 @@ def get_db_credentials():
         'database': os.getenv('DB_NAME', 'videogame_market_analysis'),
     }
 
+DB_NAME = os.getenv('DB_NAME', 'defaultdb')
+
 
 def get_connection(use_database=True):
     """
