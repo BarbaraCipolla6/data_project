@@ -1,6 +1,6 @@
 """
-app.py — Dashboard Interactivo: MySQL → Pandas → Plotly (Streamlit)
-Pipeline: MySQL → SQL queries → Pandas DataFrames → Plotly visualizaciones interactivas
+app.py — Dashboard Interactivo Avanzado: MySQL → Pandas → Plotly (Streamlit)
+Pipeline: MySQL → SQL queries → Pandas DataFrames → Plotly visualizaciones interactivas de alta fidelidad
 """
 
 import os
@@ -17,14 +17,14 @@ from utils.db_connection import query_to_dataframe, get_connection
 
 # Configuración de página
 st.set_page_config(
-    page_title="Game Strategy Advisor & BI",
+    page_title="Game Strategy Advisor & BI Studio",
     page_icon="🎮",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ============================================================================
-# CARGA DE DATOS DESDE MySQL
+# CARGA DE DATOS DESDE MySQL (CON CACHÉ)
 # ============================================================================
 
 @st.cache_data(ttl=600)
@@ -49,7 +49,7 @@ def load_genres():
         SELECT sgg.appid, g.genre_name AS genre,
                sg.year, sg.price, sg.price_category, sg.is_free,
                sg.owners_midpoint, sg.pct_pos_total, sg.peak_ccu,
-               sg.playtime_hours, sg.primary_genre
+               sg.playtime_hours, sg.primary_genre, sg.name
         FROM steam_game_genres sgg
         JOIN genres g ON g.genre_id = sgg.genre_id
         JOIN steam_games sg ON sg.appid = sgg.appid
@@ -63,7 +63,7 @@ def load_sales():
                cg.pal_sales, cg.other_sales, cg.year, cg.decade,
                cg.critic_score, cg.dominant_region,
                cg.console_generation, cg.console_manufacturer,
-               g.genre_name AS genre, c.console_abbrev
+               g.genre_name AS genre, c.console_abbrev, c.console_full
         FROM console_games cg
         LEFT JOIN genres g ON g.genre_id = cg.genre_id
         LEFT JOIN consoles c ON c.console_id = cg.console_id
@@ -86,33 +86,36 @@ except Exception as e:
     st.stop()
 
 # ============================================================================
-# BARRA LATERAL - FILTROS GLOBALES
+# BARRA LATERAL - FILTROS GLOBALES INTERACTIVOS
 # ============================================================================
-st.sidebar.title("🎮 Filtros del Mercado")
-st.sidebar.markdown("**Fuente: MySQL** `videogame_market_analysis`")
+st.sidebar.title("🎮 Filtros interactivos")
+st.sidebar.markdown("**Fuente DB:** MySQL Cloud (`Aiven`)")
 st.sidebar.markdown("---")
 
 selected_genre = st.sidebar.selectbox(
-    "Selecciona un Género Principal:",
+    "📌 Selecciona un Género Principal:",
     ["Todos"] + all_genres,
     index=all_genres.index("Action") + 1 if "Action" in all_genres else 0
 )
 
 min_year = int(df_steam['year'].dropna().min()) if df_steam['year'].min() > 2000 else 2000
 max_year = int(df_steam['year'].dropna().max()) if df_steam['year'].max() <= 2025 else 2025
-year_range = st.sidebar.slider("Rango de Años (Steam):", min_year, max_year, (2015, max_year))
+year_range = st.sidebar.slider("🗓️ Rango de Años (Steam):", min_year, max_year, (2010, max_year))
 
 price_category_filter = st.sidebar.multiselect(
-    "Categoría de Precio:",
+    "💵 Categoría de Precio:",
     ['Free', 'Budget', 'Mid', 'Premium', 'AAA'],
     default=['Free', 'Budget', 'Mid', 'Premium', 'AAA']
 )
+
+min_reviews_filter = st.sidebar.slider("⭐ Mínimo de Reseñas para Métricas:", 0, 500, 10, step=10)
 
 # Filtrar datasets según selecciones
 filtered_steam = df_steam[
     (df_steam['year'] >= year_range[0]) &
     (df_steam['year'] <= year_range[1]) &
-    (df_steam['price_category'].isin(price_category_filter))
+    (df_steam['price_category'].isin(price_category_filter)) &
+    ((df_steam['positive'] + df_steam['negative']) >= min_reviews_filter)
 ]
 
 if selected_genre != "Todos":
@@ -132,35 +135,38 @@ else:
     filtered_sales = df_sales
 
 # ============================================================================
-# ENCABEZADO Y KPIS
+# ENCABEZADO Y KPIS INTERACTIVOS
 # ============================================================================
 st.title("🎯 Game Strategy Advisor & Market Intelligence")
-st.markdown("### Plataforma de Análisis de Datos — Pipeline: MySQL → Pandas → Plotly")
+st.markdown("### Dashboard Interactivo de Inteligencia de Mercado — Pipeline: **MySQL → SQL → Pandas → Plotly**")
 st.markdown("---")
 
 col1, col2, col3, col4, col5 = st.columns(5)
 col1.metric("Juegos Steam", f"{len(filtered_steam_genre):,}")
 col2.metric("Mediana Precio", f"${filtered_steam_genre['price'].median():.2f}" if len(filtered_steam_genre) > 0 else "N/A")
 col3.metric("Mediana Owners", f"{filtered_steam_genre['owners_midpoint'].median():,.0f}" if len(filtered_steam_genre) > 0 else "N/A")
-col4.metric("% Positivas", f"{filtered_steam_genre['pct_pos_total'].median():.1f}%" if len(filtered_steam_genre) > 0 else "N/A")
-col5.metric("Ventas Consolas (M)", f"{filtered_sales['total_sales'].sum():,.2f}M" if len(filtered_sales) > 0 else "N/A")
+col4.metric("% Reseñas Positivas", f"{filtered_steam_genre['pct_pos_total'].median():.1f}%" if len(filtered_steam_genre) > 0 else "N/A")
+col5.metric("Ventas Consolas (M)", f"${filtered_sales['total_sales'].sum():,.2f}M" if len(filtered_sales) > 0 else "N/A")
 
 st.markdown("---")
 
 # ============================================================================
-# PESTAÑAS PRINCIPALES
+# PESTAÑAS PRINCIPALES INTERACTIVAS
 # ============================================================================
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🚀 Simulador Estratégico",
-    "📊 Mercado Steam",
-    "🌍 Ventas Regionales",
-    "🔍 Explorador de Juegos"
+    "📊 Mercado Steam & Tendencias",
+    "⭐ Expectativa vs Desempeño",
+    "🌍 Ventas Globales & Consolas",
+    "🔍 Explorador de Datos"
 ])
 
-# ---------- TAB 1: SIMULADOR ----------
+# ----------------------------------------------------------------------------
+# TAB 1: SIMULADOR ESTRATÉGICO
+# ----------------------------------------------------------------------------
 with tab1:
     st.subheader("💡 Asesor Estratégico de Producto & Pricing")
-    st.write("Simula el lanzamiento de tu videojuego — datos desde **MySQL**:")
+    st.write("Simula el lanzamiento de tu juego interactuando con los parámetros clave del mercado:")
 
     sim_col1, sim_col2, sim_col3 = st.columns(3)
 
@@ -173,14 +179,14 @@ with tab1:
 
     with sim_col2:
         sim_langs = st.slider("Idiomas a Localizar:", 1, 20, 5)
-        sim_trailers = st.slider("Trailers de Video:", 0, 5, 2)
+        sim_trailers = st.slider("Trailers de Video Promocionales:", 0, 5, 2)
 
     with sim_col3:
-        sim_platform = st.multiselect("Plataformas:",
+        sim_platform = st.multiselect("Plataformas Objetivo:",
                                        ["Windows", "Mac", "Linux", "Consolas"],
                                        default=["Windows", "Consolas"])
 
-    # Datos del género seleccionado (desde MySQL ya cargado)
+    # Datos del género seleccionado
     genre_data = df_genres[df_genres['genre'] == sim_genre]
     steam_genre_data = df_steam[df_steam['primary_genre'] == sim_genre]
 
@@ -190,85 +196,152 @@ with tab1:
     loc_multiplier = 1.0 + (sim_langs - 1) * 0.08
     trailer_multiplier = 1.0 + sim_trailers * 0.12
     projected_owners = int(avg_owners * loc_multiplier * trailer_multiplier)
+    projected_revenue = projected_owners * avg_price
 
-    st.markdown("#### 📈 Resultados Estimados")
+    st.markdown("#### 📈 Proyección Estimada de Impacto")
     res_col1, res_col2, res_col3, res_col4 = st.columns(4)
 
     res_col1.metric("Precio Sugerido", f"${avg_price:.2f}")
     res_col2.metric("Alcance Estimado", f"{projected_owners:,}",
-                    delta=f"+{(loc_multiplier*trailer_multiplier - 1)*100:.0f}% vs promedio")
-    res_col3.metric("Competencia", "Alta" if len(steam_genre_data) > 3000
+                    delta=f"+{(loc_multiplier*trailer_multiplier - 1)*100:.0f}% vs promedio género")
+    res_col3.metric("Revenue Bruto Est.", f"${projected_revenue:,.0f}")
+    res_col4.metric("Competencia del Género", "Alta" if len(steam_genre_data) > 3000
                     else ("Media" if len(steam_genre_data) > 1000 else "Baja"))
-    res_col4.metric("Mes Sugerido", "Marzo / Sept",
-                    help="Meses fuera de picos de ofertas")
 
     st.success(f"""
-    **📌 Recomendaciones para un juego {sim_genre}:**
-    - **Precio óptimo:** ~**\${avg_price:.2f}** (mediana del género)
-    - **Idiomas:** {sim_langs} idiomas → +{(sim_langs-1)*8}% mercado accesible
-    - **Trailers:** {sim_trailers} trailers → +{sim_trailers*12}% tasa de adquisición
-    - **Pipeline:** Datos extraídos de MySQL (`steam_games` + `genres` + JOINs)
+    **📌 Recomendaciones Estratégicas para {sim_genre}:**
+    - **Punto dulce de precio:** Fijar el precio alrededor de **\${avg_price:.2f}** maximiza la conversión para este género.
+    - **Estrategia de idiomas ({sim_langs} idiomas):** Expandir la localización aumenta tu mercado potencial en un **+{(sim_langs-1)*8:.0f}%**.
+    - **Material visual ({sim_trailers} trailers):** La presencia de trailers optimiza la tasa de conversión en la tienda en un **+{sim_trailers*12}%**.
     """)
 
-# ---------- TAB 2: MERCADO STEAM ----------
+# ----------------------------------------------------------------------------
+# TAB 2: MERCADO STEAM & TENDENCIAS
+# ----------------------------------------------------------------------------
 with tab2:
     st.subheader("📊 Panorama del Mercado Digital en Steam")
 
     m_col1, m_col2 = st.columns(2)
 
     with m_col1:
+        # Evolución interactiva en área con selector de zoom
         yearly = filtered_steam_genre.groupby('year').size().reset_index(name='juegos')
-        fig_year = px.bar(yearly, x='year', y='juegos',
-                          title=f"Lanzamientos Anuales ({selected_genre})",
-                          labels={'year': 'Año', 'juegos': 'Juegos'},
-                          color_discrete_sequence=['#636EFA'])
+        fig_year = px.area(
+            yearly, x='year', y='juegos',
+            title=f"📈 Crecimiento Histórico de Lanzamientos ({selected_genre})",
+            labels={'year': 'Año', 'juegos': 'Juegos Publicados'},
+            color_discrete_sequence=['#636EFA']
+        )
+        fig_year.update_xaxes(rangeslider_visible=True)
+        fig_year.update_traces(hovertemplate="<b>Año %{x}</b><br>Lanzamientos: %{y:,}<extra></extra>")
         st.plotly_chart(fig_year, use_container_width=True)
 
     with m_col2:
+        # Distribución de Precios con selector de rango
         price_data = filtered_steam_genre[filtered_steam_genre['price'] <= 60]
-        fig_price = px.histogram(price_data, x='price', nbins=30,
-                                  title=f"Distribución de Precios ({selected_genre})",
-                                  labels={'price': 'Precio ($)'},
-                                  color_discrete_sequence=['#EF553B'])
+        fig_price = px.histogram(
+            price_data, x='price', nbins=30,
+            color='price_category',
+            title=f"🏷️ Distribución de Precios por Categoría ({selected_genre})",
+            labels={'price': 'Precio ($)', 'price_category': 'Tier'},
+            hover_data=['price']
+        )
+        fig_price.update_layout(barmode='stack')
         st.plotly_chart(fig_price, use_container_width=True)
 
     st.markdown("---")
 
-    # Matriz de Oportunidad
-    st.subheader("🎯 Matriz Oferta vs Demanda (SQL GROUP BY + Pandas)")
-    
-    # Filtrar solo registros con reviews válidos (pct_pos_total >= 0) para el cálculo de satisfacción
+    # Matriz de Oportunidad Oferta vs Demanda
+    st.subheader("🎯 Matriz de Oportunidad por Género (Oferta vs Demanda)")
+    st.caption("Pasa el mouse sobre los puntos para explorar detalles por género. El tamaño representa el % de opiniones positivas.")
+
     valid_reviews = df_genres[df_genres['pct_pos_total'] >= 0]
     sat_per_genre = valid_reviews.groupby('genre')['pct_pos_total'].mean().reset_index()
-    
+
     genre_summary = df_genres.groupby('genre').agg(
         oferta=('appid', 'count'),
         demanda=('owners_midpoint', 'median')
     ).reset_index()
-    
+
     genre_summary = genre_summary.merge(sat_per_genre, on='genre', how='left')
     genre_summary['satisfaccion'] = genre_summary['pct_pos_total'].fillna(50).clip(lower=1)
-    
-    # Filtrar valores positivos para log scale
     genre_summary = genre_summary[(genre_summary['oferta'] > 0) & (genre_summary['demanda'] > 0)]
 
     fig_bubble = px.scatter(
         genre_summary, x='oferta', y='demanda', size='satisfaccion',
         color='genre', hover_name='genre', text='genre',
-        title="Oferta vs Demanda por Género (Tamaño = % Reseñas Positivas)",
-        labels={'oferta': 'Oferta (Total Juegos)', 'demanda': 'Demanda (Mediana Owners)', 'satisfaccion': '% Positivas'},
-        log_x=True, log_y=True
+        title="Oferta (Juegos Publicados) vs Demanda (Mediana de Owners)",
+        labels={'oferta': 'Competencia / Oferta (Total Juegos)', 'demanda': 'Demanda (Mediana Owners)', 'satisfaccion': '% Positivas'},
+        log_x=True, log_y=True, size_max=45
     )
-    fig_bubble.update_traces(textposition='top center')
+    fig_bubble.update_traces(textposition='top center', hovertemplate="<b>%{hovertext}</b><br>Oferta: %{x:,} juegos<br>Demanda: %{y:,.0f} owners<br>% Positivas: %{marker.size:.1f}%<extra></extra>")
     st.plotly_chart(fig_bubble, use_container_width=True)
 
-# ---------- TAB 3: VENTAS REGIONALES ----------
+# ----------------------------------------------------------------------------
+# TAB 3: EXPECTATIVA VS DESEMPEÑO
+# ----------------------------------------------------------------------------
 with tab3:
-    st.subheader("🌍 Análisis Regional (Consolas)")
+    st.subheader("⭐ Expectativa vs Desempeño: Metacritic vs Usuarios")
+    st.caption("Exploración interactiva de juegos con puntuación de la crítica especializada y reseñas de jugadores.")
 
-    reg_col1, reg_col2 = st.columns(2)
+    metacritic_df = filtered_steam[
+        (filtered_steam['has_metacritic'] == True) &
+        (filtered_steam['metacritic_score'] > 0) &
+        (filtered_steam['pct_pos_total'] >= 0)
+    ]
 
-    with reg_col1:
+    if len(metacritic_df) > 0:
+        fig_meta = px.scatter(
+            metacritic_df,
+            x='metacritic_score',
+            y='pct_pos_total',
+            color='price_category',
+            size='owners_midpoint',
+            hover_name='name',
+            hover_data={'price': ':.2f$', 'owners_midpoint': ':,', 'metacritic_score': True, 'pct_pos_total': True},
+            title="Relación Metacritic Score vs Reseñas Positivas de Usuarios",
+            labels={
+                'metacritic_score': 'Puntuación Crítica (Metacritic 0-100)',
+                'pct_pos_total': '% Reseñas Positivas Usuarios',
+                'price_category': 'Tier Precio',
+                'owners_midpoint': 'Owners'
+            },
+            trendline="ols",
+            size_max=40
+        )
+        fig_meta.update_traces(hovertemplate="<b>%{hovertext}</b><br>Metacritic: %{x}<br>Usuarios: %{y:.1f}% positive<br>Owners: %{marker.size:,.0f}<extra></extra>")
+        st.plotly_chart(fig_meta, use_container_width=True)
+    else:
+        st.info("No hay juegos con Metacritic en el filtro seleccionado.")
+
+    st.markdown("---")
+
+    # Matriz interactiva de correlación
+    st.subheader("🔥 Matriz Interactiva de Correlación entre Métricas del Producto")
+    corr_cols = ['price', 'owners_midpoint', 'pct_pos_total', 'peak_ccu', 'playtime_hours', 'num_languages', 'num_screenshots', 'dlc_count', 'achievements']
+    valid_corr_df = filtered_steam[corr_cols].dropna()
+
+    if len(valid_corr_df) > 10:
+        corr_matrix = valid_corr_df.corr().round(2)
+        fig_corr = px.imshow(
+            corr_matrix,
+            text_auto=True,
+            aspect="auto",
+            color_continuous_scale="RdBu_r",
+            title="Matriz de Correlación de Pearson (Nivel Producto & Engagement)"
+        )
+        st.plotly_chart(fig_corr, use_container_width=True)
+
+# ----------------------------------------------------------------------------
+# TAB 4: VENTAS GLOBALES & CONSOLAS
+# ----------------------------------------------------------------------------
+with tab4:
+    st.subheader("🌍 Ventas Globales de Consolas & Distribución Regional")
+
+    v_col1, v_col2 = st.columns(2)
+
+    with v_col1:
+        # Donut Chart interactivo de ventas por región
         sales_regions = pd.DataFrame({
             'Región': ['Norteamérica (NA)', 'Europa (PAL)', 'Japón (JP)', 'Otros'],
             'Ventas (M)': [
@@ -278,32 +351,50 @@ with tab3:
                 filtered_sales['other_sales'].sum()
             ]
         })
-        fig_donut = px.pie(sales_regions, values='Ventas (M)', names='Región',
-                           hole=0.4, title=f"Ventas por Región ({selected_genre})",
-                           color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig_donut = px.pie(
+            sales_regions, values='Ventas (M)', names='Región', hole=0.45,
+            title=f"Cuota de Ventas por Región ({selected_genre})",
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig_donut.update_traces(textinfo='percent+label', hovertemplate="<b>%{label}</b><br>Ventas: $%{value:.2f}M (%{percent})<extra></extra>")
         st.plotly_chart(fig_donut, use_container_width=True)
 
-    with reg_col2:
-        gen_sales = filtered_sales.groupby('console_generation')['total_sales'].sum().reset_index()
-        gen_sales = gen_sales.dropna()
-        fig_gen = px.bar(gen_sales, x='console_generation', y='total_sales',
-                         title="Ventas por Generación de Consola",
-                         labels={'console_generation': 'Generación', 'total_sales': 'Ventas (M)'},
-                         color='console_generation')
-        st.plotly_chart(fig_gen, use_container_width=True)
+    with v_col2:
+        # Treemap interactivo de Fabricantes -> Consolas
+        valid_console_sales = filtered_sales[filtered_sales['total_sales'] > 0].dropna(subset=['console_manufacturer', 'console_abbrev'])
+        if len(valid_console_sales) > 0:
+            fig_tree = px.treemap(
+                valid_console_sales,
+                path=['console_manufacturer', 'console_abbrev'],
+                values='total_sales',
+                color='console_manufacturer',
+                title="Jerarquía de Ventas por Fabricante y Consola (Haz clic para hacer zoom)",
+                hover_data=['total_sales']
+            )
+            fig_tree.update_traces(hovertemplate="<b>%{label}</b><br>Ventas Totales: $%{value:.2f}M<extra></extra>")
+            st.plotly_chart(fig_tree, use_container_width=True)
 
-# ---------- TAB 4: EXPLORADOR ----------
-with tab4:
-    st.subheader("🔍 Explorador Interactivo de Juegos (desde MySQL)")
-    st.write("Busca en la base de datos MySQL `videogame_market_analysis`:")
+# ----------------------------------------------------------------------------
+# TAB 5: EXPLORADOR INTERACTIVO DE JUEGOS
+# ----------------------------------------------------------------------------
+with tab5:
+    st.subheader("🔍 Explorador Avanzado de Juegos (Consulta en Vivo a MySQL)")
+    st.write("Filtra, busca y ordena títulos individuales con métricas en tiempo real:")
 
-    search_query = st.text_input("Buscar por nombre:", "")
+    search_col1, search_col2 = st.columns([2, 1])
+
+    with search_col1:
+        search_query = st.text_input("🔍 Buscar por nombre del juego:", "")
+
+    with search_col2:
+        top_n = st.number_input("Número de juegos a mostrar:", min_value=10, max_value=500, value=100, step=10)
 
     display_df = filtered_steam_genre[[
         'name', 'year', 'primary_genre', 'price', 'price_category',
-        'owners_midpoint', 'pct_pos_total', 'peak_ccu', 'average_playtime_forever'
+        'owners_midpoint', 'pct_pos_total', 'peak_ccu', 'playtime_hours'
     ]].copy()
-    display_df['average_playtime_forever'] = (display_df['average_playtime_forever'] / 60).round(1)
+
+    display_df['playtime_hours'] = display_df['playtime_hours'].round(1)
     display_df.columns = ['Nombre', 'Año', 'Género', 'Precio ($)', 'Tier',
                            'Owners', '% Positivas', 'Peak CCU', 'Horas Jugadas']
 
@@ -311,9 +402,9 @@ with tab4:
         display_df = display_df[display_df['Nombre'].str.contains(search_query, case=False, na=False)]
 
     st.dataframe(
-        display_df.sort_values(by='Owners', ascending=False).head(200),
+        display_df.sort_values(by='Owners', ascending=False).head(top_n),
         use_container_width=True
     )
 
 st.markdown("---")
-st.caption("🎮 Pipeline: CSV → Python (limpieza) → MySQL → SQL queries → Pandas → Plotly/Streamlit")
+st.caption("🎮 Pipeline: CSV → Python (limpieza) → MySQL (Aiven) → SQL queries → Pandas → Plotly/Streamlit")
