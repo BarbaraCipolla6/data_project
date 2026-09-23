@@ -31,12 +31,13 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Lista de categorías que no son videojuegos puros para filtrar ruido
+# Lista de categorías que no son videojuegos puros o contenido sensible/adulto
 NON_GAME_CATEGORIES = [
     'Utilities', 'Design & Illustration', 'Animation & Modeling', 'Education',
     'Video Production', 'Game Development', 'Software Training', 'Audio Production',
     '360 Video', 'Documentary', 'Short', 'Tutorial', 'Episodic', 'Photo Editing',
-    'Violent', 'Gore', 'Nudity', 'Sexual Content', 'Accounting', 'Movie', 'Web Publishing'
+    'Violent', 'Gore', 'Nudity', 'Sexual Content', 'NSFW', 'Hentai', 'Erotica',
+    'Accounting', 'Movie', 'Web Publishing'
 ]
 
 # ============================================================================
@@ -97,6 +98,12 @@ try:
     df_steam = load_steam_base()
     df_genres = load_genres()
     df_sales = load_sales()
+
+    # Filtrar categorías no deseadas globalmente
+    df_steam = df_steam[~df_steam['primary_genre'].isin(NON_GAME_CATEGORIES)]
+    df_genres = df_genres[~df_genres['genre'].isin(NON_GAME_CATEGORIES)]
+    df_sales = df_sales[~df_sales['genre'].isin(NON_GAME_CATEGORIES)]
+
     all_genres = load_genre_list()
 except Exception as e:
     st.info("💡 Si estás en Streamlit Cloud, asegúrate de configurar los **Secrets** en los ajustes de la app con las credenciales de Aiven MySQL. Si estás en local, verifica que XAMPP esté corriendo.")
