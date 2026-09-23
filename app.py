@@ -326,21 +326,21 @@ with tab2:
 
     def get_quadrant(row):
         if row[y_col] >= med_demanda and row['oferta'] < med_oferta:
-            return '🌟 Nicho de Oportunidad (Baja Oferta, Alta Demanda)'
+            return '🌟 Nicho de Oportunidad'
         elif row[y_col] >= med_demanda and row['oferta'] >= med_oferta:
-            return '🔵 Mercado Masivo (Alta Oferta, Alta Demanda)'
+            return '🔵 Mercado Masivo'
         elif row[y_col] < med_demanda and row['oferta'] < med_oferta:
-            return '⚪ Mercado Específico (Baja Oferta, Baja Demanda)'
+            return '⚪ Mercado Específico'
         else:
-            return '⚠️ Mercado Saturado (Alta Oferta, Baja Demanda)'
+            return '⚠️ Mercado Saturado'
 
     genre_summary['Cuadrante'] = genre_summary.apply(get_quadrant, axis=1)
 
     color_map_quads = {
-        '🌟 Nicho de Oportunidad (Baja Oferta, Alta Demanda)': '#2CA02C',
-        '🔵 Mercado Masivo (Alta Oferta, Alta Demanda)': '#1F77B4',
-        '⚪ Mercado Específico (Baja Oferta, Baja Demanda)': '#7F7F7F',
-        '⚠️ Mercado Saturado (Alta Oferta, Baja Demanda)': '#D62728'
+        '🌟 Nicho de Oportunidad': '#2CA02C',
+        '🔵 Mercado Masivo': '#1F77B4',
+        '⚪ Mercado Específico': '#7F7F7F',
+        '⚠️ Mercado Saturado': '#D62728'
     }
 
     fig_bubble = px.scatter(
@@ -363,10 +363,14 @@ with tab2:
         hovertemplate=f"<b>%{{hovertext}}</b><br>Oferta: %{{x:,}} juegos<br>{y_label}: {hover_fmt}<extra></extra>"
     )
 
-    fig_bubble.add_vline(x=med_oferta, line_dash="dash", line_color="gray", annotation_text="Mediana Oferta")
-    fig_bubble.add_hline(y=med_demanda, line_dash="dash", line_color="gray", annotation_text="Mediana Demanda")
+    fig_bubble.add_vline(x=med_oferta, line_dash="dash", line_color="gray", annotation_text="Mediana Oferta", annotation_position="top left")
+    fig_bubble.add_hline(y=med_demanda, line_dash="dash", line_color="gray", annotation_text="Mediana Demanda", annotation_position="bottom right")
 
-    fig_bubble.update_layout(height=520, margin=dict(l=20, r=20, t=50, b=30), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    fig_bubble.update_layout(
+        height=520,
+        margin=dict(l=30, r=30, t=60, b=80),
+        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
+    )
     st.plotly_chart(fig_bubble, use_container_width=True)
 
     st.markdown("---")
@@ -461,21 +465,21 @@ with tab3:
             meta = row['metacritic_score']
             user = row['pct_pos_total']
             if meta >= 75 and user >= 75:
-                return '🏆 Éxitos Aclamados (Crítica ≥ 75 & Usuarios ≥ 75%)'
+                return '🏆 Éxitos Aclamados'
             elif meta < 75 and user >= 75:
-                return '💎 Favoritos del Público / Joyas (Crítica < 75 & Usuarios ≥ 75%)'
+                return '💎 Favoritos del Público'
             elif meta >= 75 and user < 75:
-                return '💔 Mimados por la Crítica (Crítica ≥ 75 & Usuarios < 75%)'
+                return '💔 Mimados por la Crítica'
             else:
-                return '📉 Bajo Rendimiento (Crítica < 75 & Usuarios < 75%)'
+                return '📉 Bajo Rendimiento'
 
         metacritic_df['Cuadrante'] = metacritic_df.apply(get_meta_quadrant, axis=1)
 
         meta_colors = {
-            '🏆 Éxitos Aclamados (Crítica ≥ 75 & Usuarios ≥ 75%)': '#2CA02C',
-            '💎 Favoritos del Público / Joyas (Crítica < 75 & Usuarios ≥ 75%)': '#1F77B4',
-            '💔 Mimados por la Crítica (Crítica ≥ 75 & Usuarios < 75%)': '#FF7F0E',
-            '📉 Bajo Rendimiento (Crítica < 75 & Usuarios < 75%)': '#D62728'
+            '🏆 Éxitos Aclamados': '#2CA02C',
+            '💎 Favoritos del Público': '#1F77B4',
+            '💔 Mimados por la Crítica': '#FF7F0E',
+            '📉 Bajo Rendimiento': '#D62728'
         }
 
         # Determinación de variable de color
@@ -531,14 +535,14 @@ with tab3:
                     )
                 )
 
-        # Líneas divisorias en 75 puntos
-        fig_meta.add_vline(x=75, line_dash="dash", line_color="gray", annotation_text="Crítica = 75")
-        fig_meta.add_hline(y=75, line_dash="dash", line_color="gray", annotation_text="Usuarios = 75%")
+        # Líneas divisorias en 75 puntos con posiciones limpias de anotaciones
+        fig_meta.add_vline(x=75, line_dash="dash", line_color="gray", annotation_text="Crítica = 75", annotation_position="top left")
+        fig_meta.add_hline(y=75, line_dash="dash", line_color="gray", annotation_text="Usuarios = 75%", annotation_position="bottom right")
 
         fig_meta.update_layout(
             height=c_height,
-            margin=dict(l=20, r=20, t=50, b=30),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            margin=dict(l=30, r=30, t=60, b=80),
+            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
         )
         st.plotly_chart(fig_meta, use_container_width=True)
 
