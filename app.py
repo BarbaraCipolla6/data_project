@@ -23,6 +23,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Estilo personalizado para limpiar márgenes y tipografía
+st.markdown("""
+    <style>
+    .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
+    .stMetric { background-color: rgba(128, 128, 128, 0.08); padding: 10px; border-radius: 8px; }
+    </style>
+""", unsafe_allow_html=True)
+
 # ============================================================================
 # CARGA DE DATOS DESDE MySQL (CON CACHÉ)
 # ============================================================================
@@ -88,7 +96,7 @@ except Exception as e:
 # ============================================================================
 # BARRA LATERAL - FILTROS GLOBALES INTERACTIVOS
 # ============================================================================
-st.sidebar.title("🎮 Filtros interactivos")
+st.sidebar.title("🎮 Filtros del Mercado")
 st.sidebar.markdown("**Fuente DB:** MySQL Cloud (`Aiven`)")
 st.sidebar.markdown("---")
 
@@ -135,7 +143,7 @@ else:
     filtered_sales = df_sales
 
 # ============================================================================
-# ENCABEZADO Y KPIS INTERACTIVOS
+# ENCABEZADO Y KPIS
 # ============================================================================
 st.title("🎯 Game Strategy Advisor & Market Intelligence")
 st.markdown("### Dashboard Interactivo de Inteligencia de Mercado — Pipeline: **MySQL → SQL → Pandas → Plotly**")
@@ -151,7 +159,7 @@ col5.metric("Ventas Consolas (M)", f"${filtered_sales['total_sales'].sum():,.2f}
 st.markdown("---")
 
 # ============================================================================
-# PESTAÑAS PRINCIPALES INTERACTIVAS
+# PESTAÑAS PRINCIPALES INTERACTIVAS CON DISEÑO DESPEJADO
 # ============================================================================
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🚀 Simulador Estratégico",
@@ -224,36 +232,37 @@ with tab2:
     m_col1, m_col2 = st.columns(2)
 
     with m_col1:
-        # Evolución interactiva en área con selector de zoom
+        # Crecimiento histórico despejado
         yearly = filtered_steam_genre.groupby('year').size().reset_index(name='juegos')
         fig_year = px.area(
             yearly, x='year', y='juegos',
             title=f"📈 Crecimiento Histórico de Lanzamientos ({selected_genre})",
             labels={'year': 'Año', 'juegos': 'Juegos Publicados'},
-            color_discrete_sequence=['#636EFA']
+            color_discrete_sequence=['#4C78A8']
         )
+        fig_year.update_layout(height=420, margin=dict(l=20, r=20, t=50, b=30))
         fig_year.update_xaxes(rangeslider_visible=True)
         fig_year.update_traces(hovertemplate="<b>Año %{x}</b><br>Lanzamientos: %{y:,}<extra></extra>")
         st.plotly_chart(fig_year, use_container_width=True)
 
     with m_col2:
-        # Distribución de Precios con selector de rango
+        # Distribución de Precios por Categoría
         price_data = filtered_steam_genre[filtered_steam_genre['price'] <= 60]
         fig_price = px.histogram(
-            price_data, x='price', nbins=30,
+            price_data, x='price', nbins=24,
             color='price_category',
-            title=f"🏷️ Distribución de Precios por Categoría ({selected_genre})",
+            title=f"🏷️ Distribución de Precios por Tier ({selected_genre})",
             labels={'price': 'Precio ($)', 'price_category': 'Tier'},
             hover_data=['price']
         )
-        fig_price.update_layout(barmode='stack')
+        fig_price.update_layout(height=420, barmode='stack', margin=dict(l=20, r=20, t=50, b=30))
         st.plotly_chart(fig_price, use_container_width=True)
 
     st.markdown("---")
 
-    # Matriz de Oportunidad Oferta vs Demanda
+    # Matriz Oferta vs Demanda DESPEJADA (sin etiquetas amontonadas)
     st.subheader("🎯 Matriz de Oportunidad por Género (Oferta vs Demanda)")
-    st.caption("Pasa el mouse sobre los puntos para explorar detalles por género. El tamaño representa el % de opiniones positivas.")
+    st.caption("💡 *Las etiquetas de texto fueron removidas para evitar amontonamientos. Pasa el cursor sobre cada burbuja para ver los detalles del género.*")
 
     valid_reviews = df_genres[df_genres['pct_pos_total'] >= 0]
     sat_per_genre = valid_reviews.groupby('genre')['pct_pos_total'].mean().reset_index()
@@ -265,16 +274,21 @@ with tab2:
 
     genre_summary = genre_summary.merge(sat_per_genre, on='genre', how='left')
     genre_summary['satisfaccion'] = genre_summary['pct_pos_total'].fillna(50).clip(lower=1)
-    genre_summary = genre_summary[(genre_summary['oferta'] > 0) & (genre_summary['demanda'] > 0)]
+    # Filtrar géneros relevantes (oferta > 5) para evitar ruido
+    genre_summary = genre_summary[(genre_summary['oferta'] >= 5) & (genre_summary['demanda'] > 0)]
 
     fig_bubble = px.scatter(
         genre_summary, x='oferta', y='demanda', size='satisfaccion',
-        color='genre', hover_name='genre', text='genre',
-        title="Oferta (Juegos Publicados) vs Demanda (Mediana de Owners)",
+        color='genre', hover_name='genre',
+        title="Oferta (Juegos Publicados) vs Demanda (Mediana Owners por Género)",
         labels={'oferta': 'Competencia / Oferta (Total Juegos)', 'demanda': 'Demanda (Mediana Owners)', 'satisfaccion': '% Positivas'},
-        log_x=True, log_y=True, size_max=45
+        log_x=True, log_y=True, size_max=30
     )
-    fig_bubble.update_traces(textposition='top center', hovertemplate="<b>%{hovertext}</b><br>Oferta: %{x:,} juegos<br>Demanda: %{y:,.0f} owners<br>% Positivas: %{marker.size:.1f}%<extra></extra>")
+    fig_bubble.update_traces(
+        marker=dict(opacity=0.8, line=dict(width=1, color='DarkSlateGrey')),
+        hovertemplate="<b>Género: %{hovertext}</b><br>Oferta: %{x:,} juegos<br>Demanda: %{y:,.0f} owners<br>% Positivas: %{marker.size:.1f}%<extra></extra>"
+    )
+    fig_bubble.update_layout(height=520, margin=dict(l=20, r=20, t=50, b=30))
     st.plotly_chart(fig_bubble, use_container_width=True)
 
 # ----------------------------------------------------------------------------
@@ -282,13 +296,14 @@ with tab2:
 # ----------------------------------------------------------------------------
 with tab3:
     st.subheader("⭐ Expectativa vs Desempeño: Metacritic vs Usuarios")
-    st.caption("Exploración interactiva de juegos con puntuación de la crítica especializada y reseñas de jugadores.")
+    st.caption("Pasa el mouse sobre las burbujas para ver el título, precio y ventas de cada juego.")
 
+    # Filtro Top 300 juegos más relevantes para evitar amontonar miles de puntos pequeños
     metacritic_df = filtered_steam[
         (filtered_steam['has_metacritic'] == True) &
         (filtered_steam['metacritic_score'] > 0) &
         (filtered_steam['pct_pos_total'] >= 0)
-    ]
+    ].sort_values(by='owners_midpoint', ascending=False).head(350)
 
     if len(metacritic_df) > 0:
         fig_meta = px.scatter(
@@ -299,36 +314,47 @@ with tab3:
             size='owners_midpoint',
             hover_name='name',
             hover_data={'price': ':.2f$', 'owners_midpoint': ':,', 'metacritic_score': True, 'pct_pos_total': True},
-            title="Relación Metacritic Score vs Reseñas Positivas de Usuarios",
+            title="Relación Metacritic Score vs Reseñas Positivas (Top Títulos por Relevancia)",
             labels={
                 'metacritic_score': 'Puntuación Crítica (Metacritic 0-100)',
                 'pct_pos_total': '% Reseñas Positivas Usuarios',
                 'price_category': 'Tier Precio',
                 'owners_midpoint': 'Owners'
             },
-            size_max=40
+            size_max=28
         )
-        fig_meta.update_traces(hovertemplate="<b>%{hovertext}</b><br>Metacritic: %{x}<br>Usuarios: %{y:.1f}% positive<br>Owners: %{marker.size:,.0f}<extra></extra>")
+        fig_meta.update_traces(
+            marker=dict(opacity=0.75, line=dict(width=0.5, color='white')),
+            hovertemplate="<b>%{hovertext}</b><br>Metacritic: %{x}<br>Usuarios: %{y:.1f}% positivo<br>Owners: %{marker.size:,.0f}<extra></extra>"
+        )
+        fig_meta.update_layout(height=520, margin=dict(l=20, r=20, t=50, b=30))
         st.plotly_chart(fig_meta, use_container_width=True)
     else:
         st.info("No hay juegos con Metacritic en el filtro seleccionado.")
 
     st.markdown("---")
 
-    # Matriz interactiva de correlación
-    st.subheader("🔥 Matriz Interactiva de Correlación entre Métricas del Producto")
+    # Matriz interactiva de correlación despejada
+    st.subheader("🔥 Matriz de Correlaciones Nivel Producto")
     corr_cols = ['price', 'owners_midpoint', 'pct_pos_total', 'peak_ccu', 'playtime_hours', 'num_languages', 'num_screenshots', 'dlc_count', 'achievements']
+    
     valid_corr_df = filtered_steam[corr_cols].dropna()
 
     if len(valid_corr_df) > 10:
         corr_matrix = valid_corr_df.corr().round(2)
+        # Nombres claros en español
+        labels_es = ['Precio', 'Owners', '% Positivas', 'Peak CCU', 'Horas Jugadas', 'Idiomas', 'Screenshots', 'DLCs', 'Logros']
+        corr_matrix.columns = labels_es
+        corr_matrix.index = labels_es
+
         fig_corr = px.imshow(
             corr_matrix,
             text_auto=True,
             aspect="auto",
             color_continuous_scale="RdBu_r",
-            title="Matriz de Correlación de Pearson (Nivel Producto & Engagement)"
+            title="Matriz de Correlación de Pearson (Engagement vs Características)"
         )
+        fig_corr.update_layout(height=480, margin=dict(l=20, r=20, t=50, b=30))
         st.plotly_chart(fig_corr, use_container_width=True)
 
 # ----------------------------------------------------------------------------
@@ -340,7 +366,7 @@ with tab4:
     v_col1, v_col2 = st.columns(2)
 
     with v_col1:
-        # Donut Chart interactivo de ventas por región
+        # Donut Chart despejado
         sales_regions = pd.DataFrame({
             'Región': ['Norteamérica (NA)', 'Europa (PAL)', 'Japón (JP)', 'Otros'],
             'Ventas (M)': [
@@ -356,14 +382,18 @@ with tab4:
             color_discrete_sequence=px.colors.qualitative.Pastel
         )
         fig_donut.update_traces(textinfo='percent+label', hovertemplate="<b>%{label}</b><br>Ventas: $%{value:.2f}M (%{percent})<extra></extra>")
+        fig_donut.update_layout(height=450, margin=dict(l=20, r=20, t=50, b=30))
         st.plotly_chart(fig_donut, use_container_width=True)
 
     with v_col2:
-        # Treemap interactivo de Fabricantes -> Consolas
+        # Treemap AGRUPADO limpia y ordenadamente por Fabricante -> Consola
         valid_console_sales = filtered_sales[filtered_sales['total_sales'] > 0].dropna(subset=['console_manufacturer', 'console_abbrev'])
+        
         if len(valid_console_sales) > 0:
+            console_tree_df = valid_console_sales.groupby(['console_manufacturer', 'console_abbrev'])['total_sales'].sum().reset_index()
+            
             fig_tree = px.treemap(
-                valid_console_sales,
+                console_tree_df,
                 path=['console_manufacturer', 'console_abbrev'],
                 values='total_sales',
                 color='console_manufacturer',
@@ -371,14 +401,15 @@ with tab4:
                 hover_data=['total_sales']
             )
             fig_tree.update_traces(hovertemplate="<b>%{label}</b><br>Ventas Totales: $%{value:.2f}M<extra></extra>")
+            fig_tree.update_layout(height=450, margin=dict(l=20, r=20, t=50, b=30))
             st.plotly_chart(fig_tree, use_container_width=True)
 
 # ----------------------------------------------------------------------------
 # TAB 5: EXPLORADOR INTERACTIVO DE JUEGOS
 # ----------------------------------------------------------------------------
 with tab5:
-    st.subheader("🔍 Explorador Avanzado de Juegos (Consulta en Vivo a MySQL)")
-    st.write("Filtra, busca y ordena títulos individuales con métricas en tiempo real:")
+    st.subheader("🔍 Explorador Avanzado de Juegos (Consulta a MySQL)")
+    st.write("Filtra, busca y explora la base de datos limpia:")
 
     search_col1, search_col2 = st.columns([2, 1])
 
