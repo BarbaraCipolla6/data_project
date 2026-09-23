@@ -31,6 +31,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Lista de categorías que no son videojuegos puros para filtrar ruido
+NON_GAME_CATEGORIES = [
+    'Utilities', 'Design & Illustration', 'Animation & Modeling', 'Education',
+    'Video Production', 'Game Development', 'Software Training', 'Audio Production',
+    '360 Video', 'Documentary', 'Short', 'Tutorial', 'Episodic', 'Photo Editing',
+    'Violent', 'Gore', 'Nudity', 'Sexual Content', 'Accounting', 'Movie', 'Web Publishing'
+]
+
 # ============================================================================
 # CARGA DE DATOS DESDE MySQL (CON CACHÉ)
 # ============================================================================
@@ -81,7 +89,8 @@ def load_sales():
 def load_genre_list():
     """Lista de géneros disponibles desde MySQL."""
     df = query_to_dataframe("SELECT DISTINCT genre_name FROM genres ORDER BY genre_name")
-    return sorted(df['genre_name'].dropna().tolist())
+    raw_genres = df['genre_name'].dropna().tolist()
+    return sorted([g for g in raw_genres if g not in NON_GAME_CATEGORIES])
 
 # Cargar datos
 try:
@@ -232,7 +241,6 @@ with tab2:
     m_col1, m_col2 = st.columns(2)
 
     with m_col1:
-        # Crecimiento histórico despejado
         yearly = filtered_steam_genre.groupby('year').size().reset_index(name='juegos')
         fig_year = px.area(
             yearly, x='year', y='juegos',
@@ -240,13 +248,12 @@ with tab2:
             labels={'year': 'Año', 'juegos': 'Juegos Publicados'},
             color_discrete_sequence=['#4C78A8']
         )
-        fig_year.update_layout(height=420, margin=dict(l=20, r=20, t=50, b=30))
+        fig_year.update_layout(height=380, margin=dict(l=20, r=20, t=50, b=30))
         fig_year.update_xaxes(rangeslider_visible=True)
         fig_year.update_traces(hovertemplate="<b>Año %{x}</b><br>Lanzamientos: %{y:,}<extra></extra>")
         st.plotly_chart(fig_year, use_container_width=True)
 
     with m_col2:
-        # Distribución de Precios por Categoría
         price_data = filtered_steam_genre[filtered_steam_genre['price'] <= 60]
         fig_price = px.histogram(
             price_data, x='price', nbins=24,
@@ -255,80 +262,173 @@ with tab2:
             labels={'price': 'Precio ($)', 'price_category': 'Tier'},
             hover_data=['price']
         )
-        fig_price.update_layout(height=420, barmode='stack', margin=dict(l=20, r=20, t=50, b=30))
+        fig_price.update_layout(height=380, barmode='stack', margin=dict(l=20, r=20, t=50, b=30))
         st.plotly_chart(fig_price, use_container_width=True)
 
     st.markdown("---")
 
-    # Matriz Oferta vs Demanda DESPEJADA (sin etiquetas amontonadas)
-    st.subheader("🎯 Matriz de Oportunidad por Género (Oferta vs Demanda)")
-    st.caption("💡 *Las etiquetas de texto fueron removidas para evitar amontonamientos. Pasa el cursor sobre cada burbuja para ver los detalles del género.*")
+    # MATRIZ DE OPORTUNIDAD REORGANIZADA EN 4 CUADRANTES
+    st.subheader("🎯 Matriz de Oportunidad por Género (4 Cuadrantes Estratégicos)")
+    st.caption("Cada punto representa un género principal de videojuegos. Las líneas punteadas marcan la mediana del mercado para clasificar el nivel de competencia y demanda.")
 
-    valid_reviews = df_genres[df_genres['pct_pos_total'] >= 0]
+    # Filtrar solo géneros principales de videojuegos
+    game_genres_df = df_genres[~df_genres['genre'].isin(NON_GAME_CATEGORIES)]
+    valid_reviews = game_genres_df[game_genres_df['pct_pos_total'] >= 0]
     sat_per_genre = valid_reviews.groupby('genre')['pct_pos_total'].mean().reset_index()
 
-    genre_summary = df_genres.groupby('genre').agg(
+    genre_summary = game_genres_df.groupby('genre').agg(
         oferta=('appid', 'count'),
         demanda=('owners_midpoint', 'median')
     ).reset_index()
 
     genre_summary = genre_summary.merge(sat_per_genre, on='genre', how='left')
-    genre_summary['satisfaccion'] = genre_summary['pct_pos_total'].fillna(50).clip(lower=1)
-    # Filtrar géneros relevantes (oferta > 5) para evitar ruido
-    genre_summary = genre_summary[(genre_summary['oferta'] >= 5) & (genre_summary['demanda'] > 0)]
+    genre_summary['satisfaccion'] = genre_summary['pct_pos_total'].fillna(75).clip(lower=1)
+    genre_summary = genre_summary[(genre_summary['oferta'] >= 10) & (genre_summary['demanda'] > 0)]
+
+    # Medianas para los cuadrantes
+    med_oferta = genre_summary['oferta'].median()
+    med_demanda = genre_summary['demanda'].median()
+
+    def get_quadrant(row):
+        if row['demanda'] >= med_demanda and row['oferta'] < med_oferta:
+            return '🌟 Nicho de Oportunidad (Baja Oferta, Alta Demanda)'
+        elif row['demanda'] >= med_demanda and row['oferta'] >= med_oferta:
+            return '🔵 Mercado Masivo (Alta Oferta, Alta Demanda)'
+        elif row['demanda'] < med_demanda and row['oferta'] < med_oferta:
+            return '⚪ Mercado Específico (Baja Oferta, Baja Demanda)'
+        else:
+            return '⚠️ Mercado Saturado (Alta Oferta, Baja Demanda)'
+
+    genre_summary['Cuadrante'] = genre_summary.apply(get_quadrant, axis=1)
+
+    color_map_quads = {
+        '🌟 Nicho de Oportunidad (Baja Oferta, Alta Demanda)': '#2CA02C',
+        '🔵 Mercado Masivo (Alta Oferta, Alta Demanda)': '#1F77B4',
+        '⚪ Mercado Específico (Baja Oferta, Baja Demanda)': '#7F7F7F',
+        '⚠️ Mercado Saturado (Alta Oferta, Baja Demanda)': '#D62728'
+    }
 
     fig_bubble = px.scatter(
-        genre_summary, x='oferta', y='demanda', size='satisfaccion',
-        color='genre', hover_name='genre',
-        title="Oferta (Juegos Publicados) vs Demanda (Mediana Owners por Género)",
-        labels={'oferta': 'Competencia / Oferta (Total Juegos)', 'demanda': 'Demanda (Mediana Owners)', 'satisfaccion': '% Positivas'},
-        log_x=True, log_y=True, size_max=30
+        genre_summary,
+        x='oferta',
+        y='demanda',
+        color='Cuadrante',
+        color_discrete_map=color_map_quads,
+        text='genre',
+        hover_name='genre',
+        title="Matriz de Oportunidad Estratégica por Género",
+        labels={'oferta': 'Oferta / Competencia (Juegos Publicados)', 'demanda': 'Demanda (Mediana Owners)'},
+        log_x=True,
+        log_y=True
     )
+    
     fig_bubble.update_traces(
-        marker=dict(opacity=0.8, line=dict(width=1, color='DarkSlateGrey')),
-        hovertemplate="<b>Género: %{hovertext}</b><br>Oferta: %{x:,} juegos<br>Demanda: %{y:,.0f} owners<br>% Positivas: %{marker.size:.1f}%<extra></extra>"
+        textposition='top center',
+        marker=dict(size=14, line=dict(width=1.5, color='white')),
+        hovertemplate="<b>%{hovertext}</b><br>Oferta: %{x:,} juegos<br>Demanda: %{y:,.0f} owners<extra></extra>"
     )
-    fig_bubble.update_layout(height=520, margin=dict(l=20, r=20, t=50, b=30))
+    
+    fig_bubble.add_vline(x=med_oferta, line_dash="dash", line_color="gray", annotation_text="Mediana Oferta")
+    fig_bubble.add_hline(y=med_demanda, line_dash="dash", line_color="gray", annotation_text="Mediana Demanda")
+    
+    fig_bubble.update_layout(height=520, margin=dict(l=20, r=20, t=50, b=30), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig_bubble, use_container_width=True)
 
 # ----------------------------------------------------------------------------
 # TAB 3: EXPECTATIVA VS DESEMPEÑO
 # ----------------------------------------------------------------------------
 with tab3:
-    st.subheader("⭐ Expectativa vs Desempeño: Metacritic vs Usuarios")
-    st.caption("Pasa el mouse sobre las burbujas para ver el título, precio y ventas de cada juego.")
+    st.subheader("⭐ Expectativa vs Desempeño: Cuadrante Metacritic vs Usuarios")
+    st.caption("Clasificación clara de títulos según la evaluación de la crítica profesional (Metacritic) y la valoración directa de los jugadores.")
 
-    # Filtro Top 300 juegos más relevantes para evitar amontonar miles de puntos pequeños
+    ctrl_col1, ctrl_col2 = st.columns([1, 2])
+    with ctrl_col1:
+        top_sample = st.radio("Top de Juegos a mostrar (por popularidad):", [50, 100, 200, "Todos"], index=1, horizontal=True)
+
     metacritic_df = filtered_steam[
         (filtered_steam['has_metacritic'] == True) &
         (filtered_steam['metacritic_score'] > 0) &
         (filtered_steam['pct_pos_total'] >= 0)
-    ].sort_values(by='owners_midpoint', ascending=False).head(350)
+    ].sort_values(by='owners_midpoint', ascending=False)
+
+    if top_sample != "Todos":
+        metacritic_df = metacritic_df.head(int(top_sample))
 
     if len(metacritic_df) > 0:
+        def get_meta_quadrant(row):
+            meta = row['metacritic_score']
+            user = row['pct_pos_total']
+            if meta >= 75 and user >= 75:
+                return '🏆 Éxitos Aclamados (Crítica ≥ 75 & Usuarios ≥ 75%)'
+            elif meta < 75 and user >= 75:
+                return '💎 Favoritos del Público / Joyas (Crítica < 75 & Usuarios ≥ 75%)'
+            elif meta >= 75 and user < 75:
+                return '💔 Mimados por la Crítica (Crítica ≥ 75 & Usuarios < 75%)'
+            else:
+                return '📉 Bajo Rendimiento (Crítica < 75 & Usuarios < 75%)'
+
+        metacritic_df['Cuadrante'] = metacritic_df.apply(get_meta_quadrant, axis=1)
+
+        meta_colors = {
+            '🏆 Éxitos Aclamados (Crítica ≥ 75 & Usuarios ≥ 75%)': '#2CA02C',
+            '💎 Favoritos del Público / Joyas (Crítica < 75 & Usuarios ≥ 75%)': '#1F77B4',
+            '💔 Mimados por la Crítica (Crítica ≥ 75 & Usuarios < 75%)': '#FF7F0E',
+            '📉 Bajo Rendimiento (Crítica < 75 & Usuarios < 75%)': '#D62728'
+        }
+
         fig_meta = px.scatter(
             metacritic_df,
             x='metacritic_score',
             y='pct_pos_total',
-            color='price_category',
-            size='owners_midpoint',
+            color='Cuadrante',
+            color_discrete_map=meta_colors,
             hover_name='name',
             hover_data={'price': ':.2f$', 'owners_midpoint': ':,', 'metacritic_score': True, 'pct_pos_total': True},
-            title="Relación Metacritic Score vs Reseñas Positivas (Top Títulos por Relevancia)",
+            title="Matriz 2x2: Metacritic (Crítica Especializada) vs Reseñas Positivas (Jugadores)",
             labels={
-                'metacritic_score': 'Puntuación Crítica (Metacritic 0-100)',
-                'pct_pos_total': '% Reseñas Positivas Usuarios',
-                'price_category': 'Tier Precio',
-                'owners_midpoint': 'Owners'
-            },
-            size_max=28
+                'metacritic_score': 'Score Crítica (Metacritic 0-100)',
+                'pct_pos_total': '% Reseñas Positivas Usuarios'
+            }
         )
+
         fig_meta.update_traces(
-            marker=dict(opacity=0.75, line=dict(width=0.5, color='white')),
-            hovertemplate="<b>%{hovertext}</b><br>Metacritic: %{x}<br>Usuarios: %{y:.1f}% positivo<br>Owners: %{marker.size:,.0f}<extra></extra>"
+            marker=dict(size=11, opacity=0.85, line=dict(width=0.8, color='white')),
+            hovertemplate="<b>%{hovertext}</b><br>Metacritic: %{x}<br>Usuarios: %{y:.1f}% positivo<br>Precio: $%{customdata[0]}<extra></extra>"
         )
-        fig_meta.update_layout(height=520, margin=dict(l=20, r=20, t=50, b=30))
+
+        # Líneas divisorias en 75 puntos
+        fig_meta.add_vline(x=75, line_dash="dash", line_color="gray", annotation_text="Crítica = 75")
+        fig_meta.add_hline(y=75, line_dash="dash", line_color="gray", annotation_text="Usuarios = 75%")
+
+        fig_meta.update_layout(height=520, margin=dict(l=20, r=20, t=50, b=30), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         st.plotly_chart(fig_meta, use_container_width=True)
+
+        st.markdown("---")
+
+        # Gráfico Secundario: Discrepancia Crítica vs Usuarios
+        st.subheader("⚡ Top 15 Juegos con Mayor Brecha / Discrepancia (Crítica vs Usuarios)")
+        gap_df = metacritic_df.copy()
+        gap_df['gap'] = gap_df['metacritic_score'] - gap_df['pct_pos_total']
+        gap_top = pd.concat([
+            gap_df.sort_values(by='gap', ascending=False).head(8),
+            gap_df.sort_values(by='gap', ascending=True).head(8)
+        ]).drop_duplicates(subset='name')
+
+        gap_top['Tipo'] = np.where(gap_top['gap'] > 0, 'La Crítica lo prefirió más', 'Los Jugadores lo prefirieron más')
+
+        fig_gap = px.bar(
+            gap_top.sort_values(by='gap'),
+            y='name',
+            x='gap',
+            color='Tipo',
+            orientation='h',
+            title="Diferencia de Opinión (Metacritic - % Reseñas Usuarios)",
+            labels={'gap': 'Diferencia (Puntos)', 'name': 'Juego'},
+            color_discrete_map={'La Crítica lo prefirió más': '#E45756', 'Los Jugadores lo prefirieron más': '#4C78A8'}
+        )
+        fig_gap.update_layout(height=450, margin=dict(l=20, r=20, t=50, b=30))
+        st.plotly_chart(fig_gap, use_container_width=True)
+
     else:
         st.info("No hay juegos con Metacritic en el filtro seleccionado.")
 
@@ -337,12 +437,10 @@ with tab3:
     # Matriz interactiva de correlación despejada
     st.subheader("🔥 Matriz de Correlaciones Nivel Producto")
     corr_cols = ['price', 'owners_midpoint', 'pct_pos_total', 'peak_ccu', 'playtime_hours', 'num_languages', 'num_screenshots', 'dlc_count', 'achievements']
-    
     valid_corr_df = filtered_steam[corr_cols].dropna()
 
     if len(valid_corr_df) > 10:
         corr_matrix = valid_corr_df.corr().round(2)
-        # Nombres claros en español
         labels_es = ['Precio', 'Owners', '% Positivas', 'Peak CCU', 'Horas Jugadas', 'Idiomas', 'Screenshots', 'DLCs', 'Logros']
         corr_matrix.columns = labels_es
         corr_matrix.index = labels_es
@@ -352,9 +450,9 @@ with tab3:
             text_auto=True,
             aspect="auto",
             color_continuous_scale="RdBu_r",
-            title="Matriz de Correlación de Pearson (Engagement vs Características)"
+            title="Matriz de Correlación de Pearson"
         )
-        fig_corr.update_layout(height=480, margin=dict(l=20, r=20, t=50, b=30))
+        fig_corr.update_layout(height=450, margin=dict(l=20, r=20, t=50, b=30))
         st.plotly_chart(fig_corr, use_container_width=True)
 
 # ----------------------------------------------------------------------------
@@ -366,7 +464,6 @@ with tab4:
     v_col1, v_col2 = st.columns(2)
 
     with v_col1:
-        # Donut Chart despejado
         sales_regions = pd.DataFrame({
             'Región': ['Norteamérica (NA)', 'Europa (PAL)', 'Japón (JP)', 'Otros'],
             'Ventas (M)': [
@@ -386,12 +483,10 @@ with tab4:
         st.plotly_chart(fig_donut, use_container_width=True)
 
     with v_col2:
-        # Treemap AGRUPADO limpia y ordenadamente por Fabricante -> Consola
         valid_console_sales = filtered_sales[filtered_sales['total_sales'] > 0].dropna(subset=['console_manufacturer', 'console_abbrev'])
-        
         if len(valid_console_sales) > 0:
             console_tree_df = valid_console_sales.groupby(['console_manufacturer', 'console_abbrev'])['total_sales'].sum().reset_index()
-            
+
             fig_tree = px.treemap(
                 console_tree_df,
                 path=['console_manufacturer', 'console_abbrev'],
