@@ -82,8 +82,7 @@ try:
     df_sales = load_sales()
     all_genres = load_genre_list()
 except Exception as e:
-    st.error(f"❌ Error al conectar con MySQL: {e}")
-    st.info("Asegúrate de que XAMPP MySQL esté corriendo y ejecutá `01_limpieza_carga_mysql.py` primero.")
+    st.info("💡 Si estás en Streamlit Cloud, asegúrate de configurar los **Secrets** en los ajustes de la app con las credenciales de Aiven MySQL. Si estás en local, verifica que XAMPP esté corriendo.")
     st.stop()
 
 # ============================================================================
