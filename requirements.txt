@@ -4,6 +4,7 @@ matplotlib
 seaborn
 scikit-learn
 scipy
+statsmodels
 mysql-connector-python
 python-dotenv
 streamlit

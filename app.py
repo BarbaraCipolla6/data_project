@@ -306,7 +306,6 @@ with tab3:
                 'price_category': 'Tier Precio',
                 'owners_midpoint': 'Owners'
             },
-            trendline="ols",
             size_max=40
         )
         fig_meta.update_traces(hovertemplate="<b>%{hovertext}</b><br>Metacritic: %{x}<br>Usuarios: %{y:.1f}% positive<br>Owners: %{marker.size:,.0f}<extra></extra>")
