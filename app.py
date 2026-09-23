@@ -237,17 +237,27 @@ with tab2:
 
     # Matriz de Oportunidad
     st.subheader("🎯 Matriz Oferta vs Demanda (SQL GROUP BY + Pandas)")
+    
+    # Filtrar solo registros con reviews válidos (pct_pos_total >= 0) para el cálculo de satisfacción
+    valid_reviews = df_genres[df_genres['pct_pos_total'] >= 0]
+    sat_per_genre = valid_reviews.groupby('genre')['pct_pos_total'].mean().reset_index()
+    
     genre_summary = df_genres.groupby('genre').agg(
         oferta=('appid', 'count'),
-        demanda=('owners_midpoint', 'median'),
-        satisfaccion=('pct_pos_total', 'mean')
+        demanda=('owners_midpoint', 'median')
     ).reset_index()
+    
+    genre_summary = genre_summary.merge(sat_per_genre, on='genre', how='left')
+    genre_summary['satisfaccion'] = genre_summary['pct_pos_total'].fillna(50).clip(lower=1)
+    
+    # Filtrar valores positivos para log scale
+    genre_summary = genre_summary[(genre_summary['oferta'] > 0) & (genre_summary['demanda'] > 0)]
 
     fig_bubble = px.scatter(
         genre_summary, x='oferta', y='demanda', size='satisfaccion',
         color='genre', hover_name='genre', text='genre',
-        title="Oferta vs Demanda por Género",
-        labels={'oferta': 'Oferta (Total Juegos)', 'demanda': 'Demanda (Mediana Owners)'},
+        title="Oferta vs Demanda por Género (Tamaño = % Reseñas Positivas)",
+        labels={'oferta': 'Oferta (Total Juegos)', 'demanda': 'Demanda (Mediana Owners)', 'satisfaccion': '% Positivas'},
         log_x=True, log_y=True
     )
     fig_bubble.update_traces(textposition='top center')
