@@ -274,9 +274,17 @@ with tab2:
 
     st.markdown("---")
 
-    # MATRIZ DE OPORTUNIDAD REORGANIZADA EN 4 CUADRANTES
-    st.subheader("🎯 Matriz de Oportunidad por Género (4 Cuadrantes Estratégicos)")
-    st.caption("Cada punto representa un género principal de videojuegos. Las líneas punteadas marcan la mediana del mercado para clasificar el nivel de competencia y demanda.")
+    # MATRIZ DE OPORTUNIDAD REORGANIZADA CON MÉTRICAS PRECISAS DE DEMANDA
+    st.subheader("🎯 Matriz de Oportunidad Estratégica por Género")
+    st.caption("Selecciona la métrica de demanda para evaluar el atractivo relativo de cada género en el mercado.")
+
+    opt_col1, opt_col2 = st.columns([2, 1])
+
+    with opt_col1:
+        metric_choice = st.selectbox(
+            "📊 Métrica de Demanda a evaluar en el Eje Y:",
+            ["Promedio de Jugadores (Owners / Juego)", "Alcance Total del Mercado (Owners Totales)", "Jugadores Simultáneos Promedio (Peak CCU)", "Satisfacción Promedio (% Positivas)"]
+        )
 
     # Filtrar solo géneros principales de videojuegos
     game_genres_df = df_genres[~df_genres['genre'].isin(NON_GAME_CATEGORIES)]
@@ -285,23 +293,43 @@ with tab2:
 
     genre_summary = game_genres_df.groupby('genre').agg(
         oferta=('appid', 'count'),
-        demanda=('owners_midpoint', 'median')
+        avg_owners=('owners_midpoint', 'mean'),
+        total_owners=('owners_midpoint', 'sum'),
+        avg_ccu=('peak_ccu', 'mean')
     ).reset_index()
 
     genre_summary = genre_summary.merge(sat_per_genre, on='genre', how='left')
-    genre_summary['satisfaccion'] = genre_summary['pct_pos_total'].fillna(75).clip(lower=1)
-    genre_summary = genre_summary[(genre_summary['oferta'] >= 10) & (genre_summary['demanda'] > 0)]
+    genre_summary['satisfaccion'] = genre_summary['pct_pos_total'].fillna(75)
+    genre_summary = genre_summary[genre_summary['oferta'] >= 10]
+
+    # Asignación de columna Y según selección
+    if metric_choice == "Promedio de Jugadores (Owners / Juego)":
+        y_col = 'avg_owners'
+        y_label = 'Promedio Owners / Juego'
+        hover_fmt = "%{y:,.0f} owners/juego"
+    elif metric_choice == "Alcance Total del Mercado (Owners Totales)":
+        y_col = 'total_owners'
+        y_label = 'Owners Totales Acumulados'
+        hover_fmt = "%{y:,.0f} owners totales"
+    elif metric_choice == "Jugadores Simultáneos Promedio (Peak CCU)":
+        y_col = 'avg_ccu'
+        y_label = 'Peak CCU Promedio'
+        hover_fmt = "%{y:,.0f} jugadores simultáneos"
+    else:
+        y_col = 'satisfaccion'
+        y_label = '% Reseñas Positivas Promedio'
+        hover_fmt = "%{y:.1f}% positivas"
 
     # Medianas para los cuadrantes
     med_oferta = genre_summary['oferta'].median()
-    med_demanda = genre_summary['demanda'].median()
+    med_demanda = genre_summary[y_col].median()
 
     def get_quadrant(row):
-        if row['demanda'] >= med_demanda and row['oferta'] < med_oferta:
+        if row[y_col] >= med_demanda and row['oferta'] < med_oferta:
             return '🌟 Nicho de Oportunidad (Baja Oferta, Alta Demanda)'
-        elif row['demanda'] >= med_demanda and row['oferta'] >= med_oferta:
+        elif row[y_col] >= med_demanda and row['oferta'] >= med_oferta:
             return '🔵 Mercado Masivo (Alta Oferta, Alta Demanda)'
-        elif row['demanda'] < med_demanda and row['oferta'] < med_oferta:
+        elif row[y_col] < med_demanda and row['oferta'] < med_oferta:
             return '⚪ Mercado Específico (Baja Oferta, Baja Demanda)'
         else:
             return '⚠️ Mercado Saturado (Alta Oferta, Baja Demanda)'
@@ -318,28 +346,66 @@ with tab2:
     fig_bubble = px.scatter(
         genre_summary,
         x='oferta',
-        y='demanda',
+        y=y_col,
         color='Cuadrante',
         color_discrete_map=color_map_quads,
         text='genre',
         hover_name='genre',
-        title="Matriz de Oportunidad Estratégica por Género",
-        labels={'oferta': 'Oferta / Competencia (Juegos Publicados)', 'demanda': 'Demanda (Mediana Owners)'},
+        title=f"Matriz 2x2: Oferta (Juegos) vs Demanda ({y_label})",
+        labels={'oferta': 'Oferta / Competencia (Total Juegos)', y_col: y_label},
         log_x=True,
-        log_y=True
+        log_y=True if y_col != 'satisfaccion' else False
     )
-    
+
     fig_bubble.update_traces(
         textposition='top center',
         marker=dict(size=14, line=dict(width=1.5, color='white')),
-        hovertemplate="<b>%{hovertext}</b><br>Oferta: %{x:,} juegos<br>Demanda: %{y:,.0f} owners<extra></extra>"
+        hovertemplate=f"<b>%{{hovertext}}</b><br>Oferta: %{{x:,}} juegos<br>{y_label}: {hover_fmt}<extra></extra>"
     )
-    
+
     fig_bubble.add_vline(x=med_oferta, line_dash="dash", line_color="gray", annotation_text="Mediana Oferta")
     fig_bubble.add_hline(y=med_demanda, line_dash="dash", line_color="gray", annotation_text="Mediana Demanda")
-    
+
     fig_bubble.update_layout(height=520, margin=dict(l=20, r=20, t=50, b=30), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig_bubble, use_container_width=True)
+
+    st.markdown("---")
+
+    sub_m1, sub_m2 = st.columns(2)
+
+    with sub_m1:
+        # Ranking de Rendimiento Promedio por Juego
+        st.subheader("🏆 Promedio de Jugadores por Juego (Atractivo Unitario)")
+        rank_df = genre_summary.sort_values(by='avg_owners', ascending=True)
+
+        fig_rank = px.bar(
+            rank_df,
+            y='genre',
+            x='avg_owners',
+            color='avg_owners',
+            color_continuous_scale='Viridis',
+            orientation='h',
+            title="Promedio de Owners Estimado por Título Publicado",
+            labels={'avg_owners': 'Promedio Owners / Juego', 'genre': 'Género'}
+        )
+        fig_rank.update_traces(hovertemplate="<b>%{y}</b><br>Promedio: %{x:,.0f} owners/juego<extra></extra>")
+        fig_rank.update_layout(height=420, margin=dict(l=20, r=20, t=50, b=30), coloraxis_showscale=False)
+        st.plotly_chart(fig_rank, use_container_width=True)
+
+    with sub_m2:
+        # Pie Chart de Alcance Total del Mercado por Género
+        st.subheader("🥧 Cuota del Mercado Total de Jugadores (Owners Acumulados)")
+        fig_pie_genre = px.pie(
+            genre_summary,
+            values='total_owners',
+            names='genre',
+            hole=0.45,
+            title="Distribución Total de Jugadores Acumulados por Género",
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig_pie_genre.update_traces(textinfo='percent+label', hovertemplate="<b>%{label}</b><br>Total Owners: %{value:,.0f} (%{percent})<extra></extra>")
+        fig_pie_genre.update_layout(height=420, margin=dict(l=20, r=20, t=50, b=30))
+        st.plotly_chart(fig_pie_genre, use_container_width=True)
 
 # ----------------------------------------------------------------------------
 # TAB 3: EXPECTATIVA VS DESEMPEÑO
