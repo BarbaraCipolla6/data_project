@@ -537,6 +537,8 @@ with tab3:
 
             n_top_matrix = st.slider("Cantidad de juegos destacados en la matriz:", 10, 60, 25, step=5)
             
+            show_matrix_labels = st.checkbox("🏷️ Mostrar nombres de los juegos en la gráfica (desactivar para máxima claridad)", value=False)
+            
             top_meta_df = metacritic_df.sort_values(by='owners_midpoint', ascending=False).head(n_top_matrix).copy()
 
             def get_clean_quadrant(row):
@@ -548,22 +550,24 @@ with tab3:
 
             top_meta_df['Cuadrante'] = top_meta_df.apply(get_clean_quadrant, axis=1)
 
+            scatter_kwargs = {'text': 'name'} if show_matrix_labels else {}
+
             fig_top_scatter = px.scatter(
                 top_meta_df,
                 x='metacritic_score',
                 y='pct_pos_total',
                 color='Cuadrante',
-                text='name',
                 hover_name='name',
                 custom_data=['price', 'owners_midpoint', 'primary_genre'],
-                title=f"Matriz de Dispersión Despejada (Top {n_top_matrix} Títulos por Alcance)",
+                title=f"Matriz de Dispersión (Top {n_top_matrix} Títulos por Alcance)",
                 labels={'metacritic_score': 'Metacritic (Crítica 0-100)', 'pct_pos_total': '% Reseñas Positivas (Usuarios)'},
                 color_discrete_map={
                     '🏆 Éxito Aclamado': '#2CA02C',
                     '💎 Joya del Público': '#1F77B4',
                     '💔 Favorito Crítica': '#FF7F0E',
                     '📉 Bajo Rendimiento': '#D62728'
-                }
+                },
+                **scatter_kwargs
             )
 
             fig_top_scatter.update_traces(
@@ -611,6 +615,7 @@ with tab3:
                 title="Matriz de Correlación de Pearson (-1.0 a +1.0)",
                 range_color=[-1, 1]
             )
+            fig_corr.update_traces(textfont=dict(size=11, color="black"))
             fig_corr.update_layout(height=480, margin=dict(l=20, r=20, t=50, b=30))
             st.plotly_chart(fig_corr, use_container_width=True)
 
