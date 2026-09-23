@@ -459,10 +459,15 @@ with tab3:
                     barmode='group',
                     text_auto='.1f',
                     title="Score Promedio: Crítica vs Usuarios según Tier de Precio",
-                    labels={'price_category': 'Tier de Precio', 'Puntuación': 'Puntuación Promedio (0-100)'},
+                    labels={'price_category': 'Tier de Precio', 'Puntuación': 'Puntuación Promedio (0-100)', 'Evaluador': ''},
                     color_discrete_map={'Crítica': '#E45756', 'Usuarios': '#4C78A8'}
                 )
-                fig_price_comp.update_layout(height=420, margin=dict(l=30, r=30, t=60, b=70), legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
+                fig_price_comp.update_layout(
+                    height=430,
+                    margin=dict(l=30, r=30, t=60, b=90),
+                    legend_title_text="",
+                    legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5)
+                )
                 st.plotly_chart(fig_price_comp, use_container_width=True)
 
             with exp_col2:
@@ -484,10 +489,15 @@ with tab3:
                     orientation='h',
                     text_auto='.1f',
                     title="Score Promedio: Crítica vs Usuarios por Género Principal",
-                    labels={'primary_genre': 'Género', 'Puntuación': 'Puntuación Promedio'},
+                    labels={'primary_genre': 'Género', 'Puntuación': 'Puntuación Promedio', 'Evaluador': ''},
                     color_discrete_map={'Crítica': '#E45756', 'Usuarios': '#4C78A8'}
                 )
-                fig_genre_comp.update_layout(height=420, margin=dict(l=30, r=30, t=60, b=70), legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
+                fig_genre_comp.update_layout(
+                    height=430,
+                    margin=dict(l=30, r=30, t=60, b=90),
+                    legend_title_text="",
+                    legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5)
+                )
                 st.plotly_chart(fig_genre_comp, use_container_width=True)
 
         # SUBTAB 2: JOYAS OCULTAS Y DISCREPANCIAS
