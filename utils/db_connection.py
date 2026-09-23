@@ -16,31 +16,43 @@ from dotenv import load_dotenv
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(_PROJECT_ROOT, '.env'))
 
-# Configuración de conexión
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': int(os.getenv('DB_PORT', 3306)),
-    'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', ''),
-}
+def get_db_credentials():
+    """Obtiene las credenciales desde Streamlit Secrets (si está en la nube) o desde .env / os.environ (si está local)."""
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "DB_HOST" in st.secrets:
+            return {
+                'host': str(st.secrets["DB_HOST"]),
+                'port': int(st.secrets.get("DB_PORT", 3306)),
+                'user': str(st.secrets["DB_USER"]),
+                'password': str(st.secrets["DB_PASSWORD"]),
+                'database': str(st.secrets.get("DB_NAME", "defaultdb")),
+            }
+    except Exception:
+        pass
 
-DB_NAME = os.getenv('DB_NAME', 'videogame_market_analysis')
+    return {
+        'host': os.getenv('DB_HOST', 'localhost'),
+        'port': int(os.getenv('DB_PORT', 3306)),
+        'user': os.getenv('DB_USER', 'root'),
+        'password': os.getenv('DB_PASSWORD', ''),
+        'database': os.getenv('DB_NAME', 'videogame_market_analysis'),
+    }
 
 
 def get_connection(use_database=True):
     """
-    Obtiene una conexión a MySQL.
-    
-    Args:
-        use_database: Si True, conecta directamente a la base de datos del proyecto.
-                      Si False, conecta al servidor sin seleccionar base de datos.
-    
-    Returns:
-        mysql.connector.connection.MySQLConnection
+    Obtiene una conexión a MySQL (compatible con local XAMPP y Aiven Cloud).
     """
-    config = DB_CONFIG.copy()
+    creds = get_db_credentials()
+    config = {
+        'host': creds['host'],
+        'port': creds['port'],
+        'user': creds['user'],
+        'password': creds['password'],
+    }
     if use_database:
-        config['database'] = DB_NAME
+        config['database'] = creds['database']
     
     try:
         conn = mysql.connector.connect(**config)

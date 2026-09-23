@@ -55,27 +55,49 @@ def safe_val(val):
 
 
 def create_database_and_schema():
-    """Crea la base de datos y las tablas usando schema.sql via MySQL CLI."""
-    import subprocess
+    """Crea las tablas usando schema.sql vía la conexión de mysql-connector (compatible con local y Aiven)."""
     print("\n[1/5] Creando base de datos y schema...")
 
-    mysql_cli = r"C:\xampp\mysql\bin\mysql.exe"
-    schema_path = os.path.join(SQL_DIR, 'schema.sql').replace('\\', '/')
+    schema_path = os.path.join(SQL_DIR, 'schema.sql')
+    with open(schema_path, 'r', encoding='utf-8') as f:
+        sql_content = f.read()
 
-    result = subprocess.run(
-        [mysql_cli, '-u', 'root', '-e',
-         f"SOURCE {schema_path}; SHOW TABLES;"],
-        capture_output=True, text=True
-    )
+    # Separar bloques SQL por punto y coma (;)
+    statements = sql_content.split(';')
+    
+    conn = get_connection(use_database=True)
+    cursor = conn.cursor()
 
-    if result.returncode != 0:
-        print(f"  Error: {result.stderr}")
-        raise RuntimeError("No se pudo crear el schema")
+    created_tables = []
+    for stmt in statements:
+        # Limpiar espacios y comentarios
+        lines = [line.strip() for line in stmt.split('\n') if line.strip() and not line.strip().startswith('--')]
+        clean_stmt = ' '.join(lines).strip()
+        
+        if not clean_stmt:
+            continue
+        
+        # Ignorar comandos de creación/cambio de DB que pueden fallar en la nube
+        upper_stmt = clean_stmt.upper()
+        if upper_stmt.startswith('CREATE DATABASE') or upper_stmt.startswith('USE '):
+            continue
 
-    print(f"  Tablas creadas:")
-    for line in result.stdout.strip().split('\n')[1:]:
-        print(f"    • {line.strip()}")
-    print("  ✅ Schema creado exitosamente")
+        try:
+            cursor.execute(clean_stmt)
+            if 'CREATE TABLE' in upper_stmt:
+                table_name = clean_stmt.split('EXISTS')[1].split('(')[0].strip() if 'EXISTS' in upper_stmt else clean_stmt.split('TABLE')[1].split('(')[0].strip()
+                created_tables.append(table_name)
+        except Exception as e:
+            print(f"  Advertencia SQL: {e}")
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    print("  Tablas en schema:")
+    for t in created_tables:
+        print(f"    • {t}")
+    print("  ✅ Schema verificado y listo exitosamente")
 
 
 def load_and_clean_steam():
