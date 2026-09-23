@@ -439,7 +439,24 @@ with tab3:
     if top_sample != "Todos":
         metacritic_df = metacritic_df.head(int(top_sample))
 
-    if len(metacritic_df) > 0:
+    n_samples = len(metacritic_df)
+
+    if n_samples > 0:
+        # Aplicar un micro-jitter visual estético para desencimar puntos con idéntica puntuación entera
+        np.random.seed(42)
+        metacritic_df['x_plot'] = metacritic_df['metacritic_score'] + np.random.uniform(-0.35, 0.35, n_samples)
+        metacritic_df['y_plot'] = metacritic_df['pct_pos_total'] + np.random.uniform(-0.35, 0.35, n_samples)
+
+        # Adaptación dinámica de tamaño y transparencia según la cantidad de puntos elegida
+        if n_samples <= 50:
+            m_size, m_alpha, c_height = 13, 0.85, 520
+        elif n_samples <= 100:
+            m_size, m_alpha, c_height = 9, 0.70, 560
+        elif n_samples <= 200:
+            m_size, m_alpha, c_height = 7, 0.55, 600
+        else:
+            m_size, m_alpha, c_height = 5, 0.45, 650
+
         def get_meta_quadrant(row):
             meta = row['metacritic_score']
             user = row['pct_pos_total']
@@ -474,38 +491,41 @@ with tab3:
 
         fig_meta = px.scatter(
             metacritic_df,
-            x='metacritic_score',
-            y='pct_pos_total',
+            x='x_plot',
+            y='y_plot',
             color=color_var,
             hover_name='name',
-            custom_data=['price', 'owners_midpoint', 'primary_genre'],
-            title=f"Matriz Dinámica: Metacritic (Crítica) vs Reseñas Positivas (Usuarios) — Color: {color_mode}",
+            custom_data=['price', 'owners_midpoint', 'primary_genre', 'metacritic_score', 'pct_pos_total'],
+            title=f"Matriz Dinámica: Metacritic (Crítica) vs Reseñas Positivas (Usuarios) — Muestra: {n_samples} juegos",
             labels={
-                'metacritic_score': 'Score Crítica (Metacritic 0-100)',
-                'pct_pos_total': '% Reseñas Positivas Usuarios',
+                'x_plot': 'Score Crítica (Metacritic 0-100)',
+                'y_plot': '% Reseñas Positivas Usuarios',
                 'price_category': 'Tier Precio',
                 'popularity_tier': 'Popularidad'
             },
+            render_mode='webgl' if n_samples > 100 else 'svg',
             **color_kwargs
         )
 
         fig_meta.update_traces(
-            marker=dict(size=12, opacity=0.8, line=dict(width=0.8, color='white')),
-            hovertemplate="<b>%{hovertext}</b><br>Metacritic: %{x}<br>Usuarios: %{y:.1f}% positivo<br>Precio: $%{customdata[0]:.2f}<br>Owners: %{customdata[1]:,}<br>Género: %{customdata[2]}<extra></extra>"
+            marker=dict(size=m_size, opacity=m_alpha, line=dict(width=0.5, color='white')),
+            hovertemplate="<b>%{hovertext}</b><br>Metacritic Score: %{customdata[3]}<br>Reseñas Positivas: %{customdata[4]:.1f}%<br>Precio: $%{customdata[0]:.2f}<br>Owners: %{customdata[1]:,}<br>Género: %{customdata[2]}<extra></extra>"
         )
 
         # Resaltar juego si el usuario seleccionó uno
         if highlight_game != "Ninguno (Ver todos)":
             target_row = metacritic_df[metacritic_df['name'] == highlight_game]
             if len(target_row) > 0:
-                h_x = target_row['metacritic_score'].values[0]
-                h_y = target_row['pct_pos_total'].values[0]
+                h_x = target_row['x_plot'].values[0]
+                h_y = target_row['y_plot'].values[0]
+                h_meta = target_row['metacritic_score'].values[0]
+                h_user = target_row['pct_pos_total'].values[0]
                 fig_meta.add_trace(
                     go.Scatter(
                         x=[h_x], y=[h_y],
                         mode='markers+text',
-                        marker=dict(size=24, color='gold', symbol='star', line=dict(width=2, color='black')),
-                        text=[f"  ⭐ {highlight_game}"],
+                        marker=dict(size=22, color='gold', symbol='star', line=dict(width=2, color='black')),
+                        text=[f"  ⭐ {highlight_game} (Meta:{h_meta} | User:{h_user:.0f}%)"],
                         textposition="top right",
                         name=f"Resaltado: {highlight_game}"
                     )
@@ -515,7 +535,11 @@ with tab3:
         fig_meta.add_vline(x=75, line_dash="dash", line_color="gray", annotation_text="Crítica = 75")
         fig_meta.add_hline(y=75, line_dash="dash", line_color="gray", annotation_text="Usuarios = 75%")
 
-        fig_meta.update_layout(height=520, margin=dict(l=20, r=20, t=50, b=30), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig_meta.update_layout(
+            height=c_height,
+            margin=dict(l=20, r=20, t=50, b=30),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
         st.plotly_chart(fig_meta, use_container_width=True)
 
         st.markdown("---")
