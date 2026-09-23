@@ -415,183 +415,172 @@ with tab2:
 # TAB 3: EXPECTATIVA VS DESEMPEÑO
 # ----------------------------------------------------------------------------
 with tab3:
-    st.subheader("⭐ Expectativa vs Desempeño: Análisis Dinámico Crítica vs Usuarios")
-    st.caption("Filtra, resalta juegos individuales y compara cómo difiere la opinión de la crítica especializada (Metacritic) frente a los jugadores.")
-
-    # Controles dinámicos superiores
-    ctrl1, ctrl2, ctrl3 = st.columns([1.5, 1.5, 2])
-
-    with ctrl1:
-        color_mode = st.selectbox(
-            "🎨 Modo de Coloración:",
-            ["Cuadrante de Opinión", "Categoría de Precio", "Tier de Popularidad"]
-        )
-
-    with ctrl2:
-        top_sample = st.radio("📊 Muestra de Juegos (por ventas/owners):", [50, 100, 200, "Todos"], index=1, horizontal=True)
+    st.subheader("⭐ Expectativa vs Desempeño (Crítica Especializada vs Usuarios)")
+    st.caption("Analiza la alineación entre la prensa especializada (Metacritic) y la satisfacción real de los jugadores a través de comparativas agregadas, rankings de joyas ocultas y matrices despejadas.")
 
     metacritic_df = filtered_steam[
         (filtered_steam['has_metacritic'] == True) &
         (filtered_steam['metacritic_score'] > 0) &
         (filtered_steam['pct_pos_total'] >= 0)
-    ].sort_values(by='owners_midpoint', ascending=False)
+    ]
 
-    with ctrl3:
-        all_meta_games = sorted(metacritic_df['name'].dropna().unique().tolist()) if len(metacritic_df) > 0 else []
-        highlight_game = st.selectbox("🔎 Resaltar Juego Específico:", ["Ninguno (Ver todos)"] + all_meta_games)
+    if len(metacritic_df) > 0:
+        # Sub-pestañas internas para organizar la información sin amontonamiento
+        subtab_exp1, subtab_exp2, subtab_exp3 = st.tabs([
+            "📊 Comparativa por Tier & Género",
+            "🏆 Joyas Ocultas & Brechas",
+            "🎯 Matriz 2x2 Top Títulos"
+        ])
 
-    if top_sample != "Todos":
-        metacritic_df = metacritic_df.head(int(top_sample))
+        # SUBTAB 1: COMPARATIVA DE BARRAS AGRUPADAS (100% limpia)
+        with subtab_exp1:
+            st.markdown("#### ⚖️ Puntuación Media de Crítica vs Usuarios por Tier de Precio y Género")
+            
+            exp_col1, exp_col2 = st.columns(2)
 
-    n_samples = len(metacritic_df)
+            with exp_col1:
+                price_grouped = metacritic_df.groupby('price_category').agg(
+                    Crítica=('metacritic_score', 'mean'),
+                    Usuarios=('pct_pos_total', 'mean')
+                ).reset_index()
+                
+                # Reordenar categorías de precio
+                cat_order = ['Free', 'Budget', 'Mid', 'Premium', 'AAA']
+                price_grouped['price_category'] = pd.Categorical(price_grouped['price_category'], categories=cat_order, ordered=True)
+                price_grouped = price_grouped.sort_values('price_category')
 
-    if n_samples > 0:
-        # Aplicar un micro-jitter visual estético para desencimar puntos con idéntica puntuación entera
-        np.random.seed(42)
-        metacritic_df['x_plot'] = metacritic_df['metacritic_score'] + np.random.uniform(-0.35, 0.35, n_samples)
-        metacritic_df['y_plot'] = metacritic_df['pct_pos_total'] + np.random.uniform(-0.35, 0.35, n_samples)
+                melted_price = price_grouped.melt(id_vars='price_category', var_name='Evaluador', value_name='Puntuación')
 
-        # Adaptación dinámica de tamaño y transparencia según la cantidad de puntos elegida
-        if n_samples <= 50:
-            m_size, m_alpha, c_height = 13, 0.85, 520
-        elif n_samples <= 100:
-            m_size, m_alpha, c_height = 9, 0.70, 560
-        elif n_samples <= 200:
-            m_size, m_alpha, c_height = 7, 0.55, 600
-        else:
-            m_size, m_alpha, c_height = 5, 0.45, 650
-
-        def get_meta_quadrant(row):
-            meta = row['metacritic_score']
-            user = row['pct_pos_total']
-            if meta >= 75 and user >= 75:
-                return '🏆 Éxitos Aclamados'
-            elif meta < 75 and user >= 75:
-                return '💎 Favoritos del Público'
-            elif meta >= 75 and user < 75:
-                return '💔 Mimados por la Crítica'
-            else:
-                return '📉 Bajo Rendimiento'
-
-        metacritic_df['Cuadrante'] = metacritic_df.apply(get_meta_quadrant, axis=1)
-
-        meta_colors = {
-            '🏆 Éxitos Aclamados': '#2CA02C',
-            '💎 Favoritos del Público': '#1F77B4',
-            '💔 Mimados por la Crítica': '#FF7F0E',
-            '📉 Bajo Rendimiento': '#D62728'
-        }
-
-        # Determinación de variable de color
-        if color_mode == "Cuadrante de Opinión":
-            color_var = 'Cuadrante'
-            color_kwargs = {'color_discrete_map': meta_colors}
-        elif color_mode == "Categoría de Precio":
-            color_var = 'price_category'
-            color_kwargs = {}
-        else:
-            color_var = 'popularity_tier'
-            color_kwargs = {}
-
-        fig_meta = px.scatter(
-            metacritic_df,
-            x='x_plot',
-            y='y_plot',
-            color=color_var,
-            hover_name='name',
-            custom_data=['price', 'owners_midpoint', 'primary_genre', 'metacritic_score', 'pct_pos_total'],
-            title=f"Matriz Dinámica: Metacritic (Crítica) vs Reseñas Positivas (Usuarios) — Muestra: {n_samples} juegos",
-            labels={
-                'x_plot': 'Score Crítica (Metacritic 0-100)',
-                'y_plot': '% Reseñas Positivas Usuarios',
-                'price_category': 'Tier Precio',
-                'popularity_tier': 'Popularidad'
-            },
-            render_mode='webgl' if n_samples > 100 else 'svg',
-            **color_kwargs
-        )
-
-        fig_meta.update_traces(
-            marker=dict(size=m_size, opacity=m_alpha, line=dict(width=0.5, color='white')),
-            hovertemplate="<b>%{hovertext}</b><br>Metacritic Score: %{customdata[3]}<br>Reseñas Positivas: %{customdata[4]:.1f}%<br>Precio: $%{customdata[0]:.2f}<br>Owners: %{customdata[1]:,}<br>Género: %{customdata[2]}<extra></extra>"
-        )
-
-        # Resaltar juego si el usuario seleccionó uno
-        if highlight_game != "Ninguno (Ver todos)":
-            target_row = metacritic_df[metacritic_df['name'] == highlight_game]
-            if len(target_row) > 0:
-                h_x = target_row['x_plot'].values[0]
-                h_y = target_row['y_plot'].values[0]
-                h_meta = target_row['metacritic_score'].values[0]
-                h_user = target_row['pct_pos_total'].values[0]
-                fig_meta.add_trace(
-                    go.Scatter(
-                        x=[h_x], y=[h_y],
-                        mode='markers+text',
-                        marker=dict(size=22, color='gold', symbol='star', line=dict(width=2, color='black')),
-                        text=[f"  ⭐ {highlight_game} (Meta:{h_meta} | User:{h_user:.0f}%)"],
-                        textposition="top right",
-                        name=f"Resaltado: {highlight_game}"
-                    )
+                fig_price_comp = px.bar(
+                    melted_price,
+                    x='price_category',
+                    y='Puntuación',
+                    color='Evaluador',
+                    barmode='group',
+                    text_auto='.1f',
+                    title="Score Promedio: Crítica vs Usuarios según Tier de Precio",
+                    labels={'price_category': 'Tier de Precio', 'Puntuación': 'Puntuación Promedio (0-100)'},
+                    color_discrete_map={'Crítica': '#E45756', 'Usuarios': '#4C78A8'}
                 )
+                fig_price_comp.update_layout(height=420, margin=dict(l=30, r=30, t=60, b=70), legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
+                st.plotly_chart(fig_price_comp, use_container_width=True)
 
-        # Líneas divisorias en 75 puntos con posiciones limpias de anotaciones
-        fig_meta.add_vline(x=75, line_dash="dash", line_color="gray", annotation_text="Crítica = 75", annotation_position="top left")
-        fig_meta.add_hline(y=75, line_dash="dash", line_color="gray", annotation_text="Usuarios = 75%", annotation_position="bottom right")
+            with exp_col2:
+                # Filtrar géneros con al menos 10 juegos en Metacritic
+                top_genres_meta = metacritic_df.groupby('primary_genre').filter(lambda x: len(x) >= 10)
+                genre_grouped = top_genres_meta.groupby('primary_genre').agg(
+                    Crítica=('metacritic_score', 'mean'),
+                    Usuarios=('pct_pos_total', 'mean')
+                ).reset_index()
 
-        fig_meta.update_layout(
-            height=c_height,
-            margin=dict(l=30, r=30, t=60, b=80),
-            legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
-        )
-        st.plotly_chart(fig_meta, use_container_width=True)
+                melted_genre = genre_grouped.melt(id_vars='primary_genre', var_name='Evaluador', value_name='Puntuación')
 
-        st.markdown("---")
+                fig_genre_comp = px.bar(
+                    melted_genre,
+                    y='primary_genre',
+                    x='Puntuación',
+                    color='Evaluador',
+                    barmode='group',
+                    orientation='h',
+                    text_auto='.1f',
+                    title="Score Promedio: Crítica vs Usuarios por Género Principal",
+                    labels={'primary_genre': 'Género', 'Puntuación': 'Puntuación Promedio'},
+                    color_discrete_map={'Crítica': '#E45756', 'Usuarios': '#4C78A8'}
+                )
+                fig_genre_comp.update_layout(height=420, margin=dict(l=30, r=30, t=60, b=70), legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5))
+                st.plotly_chart(fig_genre_comp, use_container_width=True)
 
-        sub_col1, sub_col2 = st.columns(2)
+        # SUBTAB 2: JOYAS OCULTAS Y DISCREPANCIAS
+        with subtab_exp2:
+            st.markdown("#### 💎 Identificación de Joyas Ocultas y Brechas de Opinión")
+            
+            j1, j2 = st.columns(2)
 
-        with sub_col1:
-            # Gráfico de Discrepancia Crítica vs Usuarios
-            st.subheader("⚡ Brecha de Opinión (Crítica vs Usuarios)")
-            gap_df = metacritic_df.copy()
-            gap_df['gap'] = gap_df['metacritic_score'] - gap_df['pct_pos_total']
-            gap_top = pd.concat([
-                gap_df.sort_values(by='gap', ascending=False).head(7),
-                gap_df.sort_values(by='gap', ascending=True).head(7)
-            ]).drop_duplicates(subset='name')
+            with j1:
+                st.subheader("💎 Joyas Ocultas (Jugadores ≥ 80% | Crítica < 75)")
+                joyas_df = metacritic_df[
+                    (metacritic_df['pct_pos_total'] >= 80) &
+                    (metacritic_df['metacritic_score'] < 75)
+                ].sort_values(by='owners_midpoint', ascending=False).head(15)
 
-            gap_top['Tipo'] = np.where(gap_top['gap'] > 0, 'La Crítica lo prefirió más', 'Los Jugadores lo prefirieron más')
+                if len(joyas_df) > 0:
+                    st.dataframe(
+                        joyas_df[['name', 'primary_genre', 'price', 'metacritic_score', 'pct_pos_total', 'owners_midpoint']].rename(
+                            columns={'name': 'Juego', 'primary_genre': 'Género', 'price': 'Precio ($)', 'metacritic_score': 'Metacritic', 'pct_pos_total': '% Positivas', 'owners_midpoint': 'Owners'}
+                        ),
+                        use_container_width=True
+                    )
+                else:
+                    st.info("No se encontraron juegos en esta categoría para los filtros actuales.")
 
-            fig_gap = px.bar(
-                gap_top.sort_values(by='gap'),
-                y='name',
-                x='gap',
-                color='Tipo',
-                orientation='h',
-                title="Diferencia de Puntuación (Metacritic - % Usuarios)",
-                labels={'gap': 'Diferencia (Puntos)', 'name': 'Juego'},
-                color_discrete_map={'La Crítica lo prefirió más': '#E45756', 'Los Jugadores lo prefirieron más': '#4C78A8'}
-            )
-            fig_gap.update_traces(hovertemplate="<b>%{y}</b><br>Diferencia: %{x:.1f} puntos<extra></extra>")
-            fig_gap.update_layout(height=420, margin=dict(l=20, r=20, t=50, b=30))
-            st.plotly_chart(fig_gap, use_container_width=True)
+            with j2:
+                st.subheader("💔 Mimados por la Crítica (Crítica ≥ 80 | Jugadores < 70%)")
+                mimados_df = metacritic_df[
+                    (metacritic_df['metacritic_score'] >= 80) &
+                    (metacritic_df['pct_pos_total'] < 70)
+                ].sort_values(by='owners_midpoint', ascending=False).head(15)
 
-        with sub_col2:
-            # Boxplot interactivo de Metacritic por Categoría de Precio
-            st.subheader("🏷️ Metacritic Score por Tier de Precio")
-            fig_box = px.box(
-                metacritic_df,
-                x='price_category',
-                y='metacritic_score',
-                color='price_category',
-                points="all",
+                if len(mimados_df) > 0:
+                    st.dataframe(
+                        mimados_df[['name', 'primary_genre', 'price', 'metacritic_score', 'pct_pos_total', 'owners_midpoint']].rename(
+                            columns={'name': 'Juego', 'primary_genre': 'Género', 'price': 'Precio ($)', 'metacritic_score': 'Metacritic', 'pct_pos_total': '% Positivas', 'owners_midpoint': 'Owners'}
+                        ),
+                        use_container_width=True
+                    )
+                else:
+                    st.info("No se encontraron juegos en esta categoría para los filtros actuales.")
+
+        # SUBTAB 3: MATRIZ 2x2 TOP TÍTULOS DESPEJADA
+        with subtab_exp3:
+            st.markdown("#### 🎯 Matriz 2x2 Despejada de Juegos Destacados (Top por Popularidad)")
+            st.caption("Para evitar amontonamientos, esta matriz muestra únicamente los **Top juegos más relevantes**, permitiendo leer los nombres con total claridad.")
+
+            n_top_matrix = st.slider("Cantidad de juegos destacados en la matriz:", 10, 60, 25, step=5)
+            
+            top_meta_df = metacritic_df.sort_values(by='owners_midpoint', ascending=False).head(n_top_matrix).copy()
+
+            def get_clean_quadrant(row):
+                m, u = row['metacritic_score'], row['pct_pos_total']
+                if m >= 75 and u >= 75: return '🏆 Éxito Aclamado'
+                elif m < 75 and u >= 75: return '💎 Joya del Público'
+                elif m >= 75 and u < 75: return '💔 Favorito Crítica'
+                else: return '📉 Bajo Rendimiento'
+
+            top_meta_df['Cuadrante'] = top_meta_df.apply(get_clean_quadrant, axis=1)
+
+            fig_top_scatter = px.scatter(
+                top_meta_df,
+                x='metacritic_score',
+                y='pct_pos_total',
+                color='Cuadrante',
+                text='name',
                 hover_name='name',
-                title="Distribución de Puntuación Crítica por Rango de Precio",
-                labels={'price_category': 'Tier de Precio', 'metacritic_score': 'Metacritic Score'}
+                custom_data=['price', 'owners_midpoint', 'primary_genre'],
+                title=f"Matriz de Dispersión Despejada (Top {n_top_matrix} Títulos por Alcance)",
+                labels={'metacritic_score': 'Metacritic (Crítica 0-100)', 'pct_pos_total': '% Reseñas Positivas (Usuarios)'},
+                color_discrete_map={
+                    '🏆 Éxito Aclamado': '#2CA02C',
+                    '💎 Joya del Público': '#1F77B4',
+                    '💔 Favorito Crítica': '#FF7F0E',
+                    '📉 Bajo Rendimiento': '#D62728'
+                }
             )
-            fig_box.update_traces(hovertemplate="<b>%{hovertext}</b><br>Score: %{y}<extra></extra>")
-            fig_box.update_layout(height=420, margin=dict(l=20, r=20, t=50, b=30))
-            st.plotly_chart(fig_box, use_container_width=True)
+
+            fig_top_scatter.update_traces(
+                textposition='top center',
+                marker=dict(size=14, line=dict(width=1, color='white')),
+                hovertemplate="<b>%{hovertext}</b><br>Metacritic: %{x}<br>Usuarios: %{y:.1f}% positivo<br>Precio: $%{customdata[0]:.2f}<extra></extra>"
+            )
+
+            fig_top_scatter.add_vline(x=75, line_dash="dash", line_color="gray", annotation_text="Crítica = 75", annotation_position="top left")
+            fig_top_scatter.add_hline(y=75, line_dash="dash", line_color="gray", annotation_text="Usuarios = 75%", annotation_position="bottom right")
+
+            fig_top_scatter.update_layout(
+                height=560,
+                margin=dict(l=30, r=30, t=60, b=80),
+                legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
+            )
+            st.plotly_chart(fig_top_scatter, use_container_width=True)
 
     else:
         st.info("No hay juegos con Metacritic en el filtro seleccionado.")
@@ -618,6 +607,7 @@ with tab3:
         )
         fig_corr.update_layout(height=450, margin=dict(l=20, r=20, t=50, b=30))
         st.plotly_chart(fig_corr, use_container_width=True)
+
 
 # ----------------------------------------------------------------------------
 # TAB 4: VENTAS GLOBALES & CONSOLAS
